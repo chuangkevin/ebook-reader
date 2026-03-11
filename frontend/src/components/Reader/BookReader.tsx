@@ -34,9 +34,10 @@ interface EpubRendition {
   flow: (value: string) => void;
   currentLocation: () => unknown;
   on: (event: string, callback: (...args: unknown[]) => void) => void;
+  getContents: () => Array<{ window: Window; document: Document }>;
   hooks: {
     content: {
-      register: (fn: (contents: { document: Document }) => void) => void;
+      register: (fn: (contents: { document: Document; window: Window }) => void) => void;
     };
   };
 }
@@ -123,13 +124,18 @@ export default function BookReader() {
     const rendition = renditionRef.current;
     if (!rendition) return;
 
-    const epubStyles = {
+    const isVertical = settings.writingMode === 'vertical';
+
+    // Switch flow mode: vertical → scrolled-doc (avoids CSS column conflict),
+    // horizontal → paginated (normal page-by-page)
+    rendition.flow(isVertical ? 'scrolled-doc' : 'paginated');
+
+    const epubStyles: Record<string, Record<string, string>> = {
       body: {
         'background-color': `${theme.bg} !important`,
         color: `${theme.fg} !important`,
         'font-size': `${settings.fontSize}px !important`,
         'line-height': `${settings.lineHeight} !important`,
-        'writing-mode': settings.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
         '-webkit-user-select': 'none !important',
         'user-select': 'none !important',
       },
@@ -138,6 +144,11 @@ export default function BookReader() {
         'line-height': `${settings.lineHeight} !important`,
       },
     };
+
+    if (isVertical) {
+      epubStyles.body['writing-mode'] = 'vertical-rl';
+      epubStyles.body['-webkit-writing-mode'] = 'vertical-rl';
+    }
 
     rendition.themes.default(epubStyles);
 
@@ -154,10 +165,48 @@ export default function BookReader() {
     setShowBar(prev => !prev);
   }, []);
 
+  // Helper: scroll vertical-rl epub content by one "page"
+  const scrollEpubVertical = useCallback((direction: 'prev' | 'next') => {
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    const contents = rendition.getContents();
+    if (!contents || contents.length === 0) return;
+    const contentWin = contents[0].window;
+    const contentDoc = contents[0].document;
+    const scrollEl = contentDoc.scrollingElement || contentDoc.documentElement;
+
+    // In vertical-rl, scrollLeft is 0 at the RIGHT edge (start) and negative towards left
+    const pageWidth = contentWin.innerWidth || scrollEl.clientWidth;
+    const scrollAmount = pageWidth * 0.85;
+
+    if (direction === 'next') {
+      // Reading forward = scroll LEFT (more negative scrollLeft)
+      const minScroll = -(scrollEl.scrollWidth - scrollEl.clientWidth);
+      if (scrollEl.scrollLeft <= minScroll + 5) {
+        // At the end of this section → go to next chapter
+        rendition.next();
+      } else {
+        scrollEl.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+      }
+    } else {
+      // Reading backward = scroll RIGHT (less negative scrollLeft)
+      if (scrollEl.scrollLeft >= -5) {
+        // At the beginning of this section → go to prev chapter
+        rendition.prev();
+      } else {
+        scrollEl.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      }
+    }
+  }, []);
+
   // Unified prev/next for keyboard & side buttons
   const goPrev = useCallback(() => {
     if (book?.format === 'epub') {
-      renditionRef.current?.prev();
+      if (settings.writingMode === 'vertical') {
+        scrollEpubVertical('prev');
+      } else {
+        renditionRef.current?.prev();
+      }
     } else if (book?.format === 'txt') {
       const el = document.querySelector('[data-txt-container]') as HTMLElement;
       if (!el) return;
@@ -168,11 +217,15 @@ export default function BookReader() {
         el.scrollBy({ top: -el.clientHeight * 0.85, behavior: 'smooth' });
       }
     }
-  }, [book?.format, settings.writingMode]);
+  }, [book?.format, settings.writingMode, scrollEpubVertical]);
 
   const goNext = useCallback(() => {
     if (book?.format === 'epub') {
-      renditionRef.current?.next();
+      if (settings.writingMode === 'vertical') {
+        scrollEpubVertical('next');
+      } else {
+        renditionRef.current?.next();
+      }
     } else if (book?.format === 'txt') {
       const el = document.querySelector('[data-txt-container]') as HTMLElement;
       if (!el) return;
@@ -183,7 +236,7 @@ export default function BookReader() {
         el.scrollBy({ top: el.clientHeight * 0.85, behavior: 'smooth' });
       }
     }
-  }, [book?.format, settings.writingMode]);
+  }, [book?.format, settings.writingMode, scrollEpubVertical]);
 
   // Keep refs in sync for keyboard callbacks
   useEffect(() => { goPrevRef.current = goPrev; }, [goPrev]);
@@ -286,7 +339,8 @@ export default function BookReader() {
               location={location}
               locationChanged={handleEpubLocationChanged}
               epubOptions={{
-                flow: 'paginated',
+                flow: settings.writingMode === 'vertical' ? 'scrolled-doc' : 'paginated',
+                spread: 'none',
               }}
               readerStyles={{
                 ...ReactReaderStyle,
@@ -296,19 +350,22 @@ export default function BookReader() {
               getRendition={(rendition) => {
                 renditionRef.current = rendition as unknown as EpubRendition;
 
-                // Ensure paginated flow after epub.js initializes
+                const isVertical = settings.writingMode === 'vertical';
+
+                // Ensure correct flow after epub.js initializes
                 rendition.on('started', () => {
-                  (rendition as unknown as EpubRendition).flow('paginated');
+                  (rendition as unknown as EpubRendition).flow(
+                    isVertical ? 'scrolled-doc' : 'paginated'
+                  );
                 });
 
-                // Apply initial styles (including user-select: none)
-                rendition.themes.default({
+                // Apply initial styles
+                const initialStyles: Record<string, Record<string, string>> = {
                   body: {
                     'background-color': `${theme.bg} !important`,
                     color: `${theme.fg} !important`,
                     'font-size': `${settings.fontSize}px !important`,
                     'line-height': `${settings.lineHeight} !important`,
-                    'writing-mode': settings.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                     '-webkit-user-select': 'none !important',
                     'user-select': 'none !important',
                   },
@@ -316,7 +373,14 @@ export default function BookReader() {
                     'font-size': `${settings.fontSize}px !important`,
                     'line-height': `${settings.lineHeight} !important`,
                   },
-                });
+                };
+
+                if (isVertical) {
+                  initialStyles.body['writing-mode'] = 'vertical-rl';
+                  initialStyles.body['-webkit-writing-mode'] = 'vertical-rl';
+                }
+
+                rendition.themes.default(initialStyles);
 
                 rendition.on('relocated', (loc: { start: { percentage: number } }) => {
                   const pct = Math.round(loc.start.percentage * 100);
