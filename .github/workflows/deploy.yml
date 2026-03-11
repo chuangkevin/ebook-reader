@@ -102,8 +102,7 @@ jobs:
         run: |
           echo "Performing health check..."
           sleep 10
-          curl -f http://${{ secrets.DEPLOY_SERVER_IP }}:7123/api/health || \
-          curl -f http://${{ secrets.DEPLOY_SERVER_IP }}:3003/health || exit 1
+          curl -f http://${{ secrets.DEPLOY_SERVER_IP }}:7123/ || exit 1
           echo "Health check passed!"
 
       - name: Deployment Summary
