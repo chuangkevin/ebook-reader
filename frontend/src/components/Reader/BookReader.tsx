@@ -31,6 +31,7 @@ interface EpubRendition {
   prev: () => void;
   next: () => void;
   display: (target: string) => void;
+  flow: (value: string) => void;
   currentLocation: () => unknown;
   on: (event: string, callback: (...args: unknown[]) => void) => void;
   hooks: {
@@ -57,11 +58,12 @@ export default function BookReader() {
   const percentageRef = useRef(0);
   const renditionRef = useRef<EpubRendition | null>(null);
 
-  // Refs for stable closure in rendition callbacks
+  // Refs for stable closure in keyboard callbacks
   const goPrevRef = useRef<() => void>(() => {});
   const goNextRef = useRef<() => void>(() => {});
-  const handleToggleBarRef = useRef<() => void>(() => {});
-  const tapZoneLayoutRef = useRef(settings.tapZoneLayout);
+
+  // Pointer tracking for tap detection (works on both desktop and mobile)
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
 
   const { save } = useProgressSync(currentUser?.id || '', bookId || '');
 
@@ -183,11 +185,9 @@ export default function BookReader() {
     }
   }, [book?.format, settings.writingMode]);
 
-  // Keep refs in sync for rendition callbacks
+  // Keep refs in sync for keyboard callbacks
   useEffect(() => { goPrevRef.current = goPrev; }, [goPrev]);
   useEffect(() => { goNextRef.current = goNext; }, [goNext]);
-  useEffect(() => { handleToggleBarRef.current = handleToggleBar; }, [handleToggleBar]);
-  useEffect(() => { tapZoneLayoutRef.current = settings.tapZoneLayout; }, [settings.tapZoneLayout]);
 
   // Keyboard: Arrow keys, PageUp/Down, Space, Volume keys, Boox buttons
   useEffect(() => {
@@ -285,9 +285,7 @@ export default function BookReader() {
               url={epubData}
               location={location}
               locationChanged={handleEpubLocationChanged}
-              swipeable
               epubOptions={{
-                allowScriptedContent: true,
                 flow: 'paginated',
               }}
               readerStyles={{
@@ -297,6 +295,11 @@ export default function BookReader() {
               }}
               getRendition={(rendition) => {
                 renditionRef.current = rendition as unknown as EpubRendition;
+
+                // Ensure paginated flow after epub.js initializes
+                rendition.on('started', () => {
+                  (rendition as unknown as EpubRendition).flow('paginated');
+                });
 
                 // Apply initial styles (including user-select: none)
                 rendition.themes.default({
@@ -313,25 +316,6 @@ export default function BookReader() {
                     'font-size': `${settings.fontSize}px !important`,
                     'line-height': `${settings.lineHeight} !important`,
                   },
-                });
-
-                // Tap zone navigation on EPUB content
-                rendition.on('click', (event: MouseEvent) => {
-                  const width = (event.view as Window)?.innerWidth || window.innerWidth;
-                  const zone = event.clientX / width;
-                  const action = getTapAction(zone, tapZoneLayoutRef.current);
-
-                  switch (action) {
-                    case 'prev':
-                      goPrevRef.current();
-                      break;
-                    case 'next':
-                      goNextRef.current();
-                      break;
-                    case 'toggle':
-                      handleToggleBarRef.current();
-                      break;
-                  }
                 });
 
                 rendition.on('relocated', (loc: { start: { percentage: number } }) => {
@@ -403,7 +387,30 @@ export default function BookReader() {
       </AppBar>
 
       {/* Reader */}
-      <Box sx={{ flex: 1, position: 'relative' }}>
+      <Box
+        sx={{ flex: 1, position: 'relative' }}
+        onPointerDown={(e) => {
+          pointerDownPos.current = { x: e.clientX, y: e.clientY };
+        }}
+        onPointerUp={(e) => {
+          if (!pointerDownPos.current || settingsOpen) return;
+          const dx = e.clientX - pointerDownPos.current.x;
+          const dy = e.clientY - pointerDownPos.current.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          pointerDownPos.current = null;
+
+          // Only handle as tap if pointer didn't move much (not a swipe)
+          if (dist > 15) return;
+
+          const zone = e.clientX / window.innerWidth;
+          const action = getTapAction(zone, settings.tapZoneLayout);
+          switch (action) {
+            case 'prev': goPrev(); break;
+            case 'next': goNext(); break;
+            case 'toggle': handleToggleBar(); break;
+          }
+        }}
+      >
         {renderReader()}
 
         {/* Desktop side nav buttons for TXT (EPUB has tap zones) */}
