@@ -5,6 +5,7 @@ import apiService from '../services/api.service';
 interface BookState {
   books: Book[];
   userProgress: ProgressWithBook[];
+  bookmarks: string[];
   isLoading: boolean;
   uploadProgress: number;
   error: string | null;
@@ -13,6 +14,7 @@ interface BookState {
 const initialState: BookState = {
   books: [],
   userProgress: [],
+  bookmarks: [],
   isLoading: false,
   uploadProgress: 0,
   error: null,
@@ -26,6 +28,21 @@ export const fetchUserProgress = createAsyncThunk(
   'books/fetchUserProgress',
   async (userId: string) => {
     return await apiService.getUserProgress(userId);
+  }
+);
+
+export const fetchBookmarks = createAsyncThunk(
+  'books/fetchBookmarks',
+  async (userId: string) => {
+    return await apiService.getBookmarks(userId);
+  }
+);
+
+export const toggleBookmark = createAsyncThunk(
+  'books/toggleBookmark',
+  async ({ userId, bookId }: { userId: string; bookId: string }) => {
+    const result = await apiService.toggleBookmark(userId, bookId);
+    return { bookId, bookmarked: result.bookmarked };
   }
 );
 
@@ -65,9 +82,21 @@ const bookSlice = createSlice({
       .addCase(fetchUserProgress.fulfilled, (state, action) => {
         state.userProgress = action.payload;
       })
+      .addCase(fetchBookmarks.fulfilled, (state, action) => {
+        state.bookmarks = action.payload;
+      })
+      .addCase(toggleBookmark.fulfilled, (state, action) => {
+        const { bookId, bookmarked } = action.payload;
+        if (bookmarked) {
+          if (!state.bookmarks.includes(bookId)) state.bookmarks.push(bookId);
+        } else {
+          state.bookmarks = state.bookmarks.filter(id => id !== bookId);
+        }
+      })
       .addCase(deleteBook.fulfilled, (state, action) => {
         state.books = state.books.filter(b => b.id !== action.payload);
         state.userProgress = state.userProgress.filter(p => p.bookId !== action.payload);
+        state.bookmarks = state.bookmarks.filter(id => id !== action.payload);
       });
   },
 });

@@ -21,12 +21,15 @@ import {
   DialogContent,
   DialogActions,
   Chip,
+  Tooltip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LogoutIcon from '@mui/icons-material/Logout';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import type { AppDispatch, RootState } from '../../store';
-import { fetchBooks, fetchUserProgress, deleteBook, addBook, setUploadProgress } from '../../store/bookSlice';
+import { fetchBooks, fetchUserProgress, fetchBookmarks, toggleBookmark, deleteBook, addBook, setUploadProgress } from '../../store/bookSlice';
 import { selectUser } from '../../store/userSlice';
 import apiService from '../../services/api.service';
 import type { Book } from '../../types';
@@ -47,7 +50,7 @@ export default function BookLibrary() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { currentUser } = useSelector((state: RootState) => state.user);
-  const { books, userProgress, isLoading, uploadProgress } = useSelector((state: RootState) => state.books);
+  const { books, userProgress, bookmarks, isLoading, uploadProgress } = useSelector((state: RootState) => state.books);
   const [uploading, setUploading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -58,6 +61,7 @@ export default function BookLibrary() {
     dispatch(fetchBooks());
     if (currentUser) {
       dispatch(fetchUserProgress(currentUser.id));
+      dispatch(fetchBookmarks(currentUser.id));
     }
   }, [dispatch, currentUser]);
 
@@ -101,35 +105,44 @@ export default function BookLibrary() {
     setDeleteDialogOpen(false);
   };
 
+  const handleToggleBookmark = (bookId: string) => {
+    if (!currentUser) return;
+    dispatch(toggleBookmark({ userId: currentUser.id, bookId }));
+  };
+
   const handleSwitchUser = () => {
     dispatch(selectUser(null));
     navigate('/');
   };
 
-  // 區分「繼續閱讀」和「未開始閱讀」的書
-  const { continueReading, unreadBooks } = useMemo(() => {
+  const bookmarkSet = useMemo(() => new Set(bookmarks), [bookmarks]);
+
+  // 區分「繼續閱讀」、「稍後閱讀」和「書庫」
+  const { continueReading, readLaterBooks, otherBooks } = useMemo(() => {
     const progressMap = new Map(userProgress.map(p => [p.bookId, p]));
     const reading: Array<{ book: Book; percentage: number }> = [];
-    const unread: Book[] = [];
+    const readLater: Book[] = [];
+    const other: Book[] = [];
 
     for (const book of books) {
       const progress = progressMap.get(book.id);
       if (progress && (progress.percentage > 0 || progress.cfi)) {
         reading.push({ book, percentage: progress.percentage });
+      } else if (bookmarkSet.has(book.id)) {
+        readLater.push(book);
       } else {
-        unread.push(book);
+        other.push(book);
       }
     }
 
-    // 按最後閱讀時間排序
     reading.sort((a, b) => {
       const pa = progressMap.get(a.book.id);
       const pb = progressMap.get(b.book.id);
       return (pb?.lastReadAt || 0) - (pa?.lastReadAt || 0);
     });
 
-    return { continueReading: reading, unreadBooks: unread };
-  }, [books, userProgress]);
+    return { continueReading: reading, readLaterBooks: readLater, otherBooks: other };
+  }, [books, userProgress, bookmarkSet]);
 
   if (isLoading && books.length === 0) {
     return (
@@ -139,9 +152,70 @@ export default function BookLibrary() {
     );
   }
 
-  const formatLabel = (fmt: string) => {
-    return fmt.toUpperCase();
-  };
+  // 書籍卡片（共用）
+  const renderBookCard = (book: Book, options?: { showProgress?: number }) => (
+    <Card
+      sx={{
+        height: '100%',
+        position: 'relative',
+        transition: 'transform 0.2s',
+        '&:hover': { transform: 'scale(1.03)' },
+      }}
+    >
+      <CardActionArea onClick={() => navigate(`/read/${book.id}`)}>
+        <BookCover book={book} height={240} />
+        <CardContent sx={{ p: 1.5 }}>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+            {book.title}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ flex: 1 }}>
+              {book.author}
+            </Typography>
+            <Chip label={book.format.toUpperCase()} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+          </Box>
+          {options?.showProgress !== undefined && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+              <LinearProgress
+                variant="determinate"
+                value={options.showProgress}
+                sx={{ flex: 1, borderRadius: 1, height: 6 }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 32, textAlign: 'right' }}>
+                {Math.round(options.showProgress)}%
+              </Typography>
+            </Box>
+          )}
+        </CardContent>
+      </CardActionArea>
+
+      {/* 操作按鈕 */}
+      <Box sx={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 0.5 }}>
+        <Tooltip title={bookmarkSet.has(book.id) ? '取消稍後閱讀' : '稍後閱讀'}>
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); handleToggleBookmark(book.id); }}
+            sx={{ bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } }}
+          >
+            {bookmarkSet.has(book.id) ? (
+              <BookmarkIcon fontSize="small" sx={{ color: '#ffc107' }} />
+            ) : (
+              <BookmarkBorderIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
+        {currentUser && book.uploadedBy === currentUser.id && (
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); setDeleteTarget(book.id); setDeleteDialogOpen(true); }}
+            sx={{ bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'error.dark' } }}
+          >
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        )}
+      </Box>
+    </Card>
+  );
 
   return (
     <Box sx={{ minHeight: '100vh', p: 3 }}>
@@ -176,98 +250,47 @@ export default function BookLibrary() {
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 1, '::-webkit-scrollbar': { height: 6 }, '::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.2)', borderRadius: 3 } }}>
             {continueReading.map(({ book, percentage }) => (
-              <Card
-                key={book.id}
-                sx={{
-                  minWidth: 180,
-                  maxWidth: 180,
-                  flexShrink: 0,
-                  position: 'relative',
-                  transition: 'transform 0.2s',
-                  '&:hover': { transform: 'scale(1.03)' },
-                }}
-              >
-                <CardActionArea onClick={() => navigate(`/read/${book.id}`)}>
-                  <BookCover book={book} height={240} />
-                  <CardContent sx={{ p: 1.5 }}>
-                    <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-                      {book.title}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap>
-                      {book.author}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={percentage}
-                        sx={{ flex: 1, borderRadius: 1, height: 6 }}
-                      />
-                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 32, textAlign: 'right' }}>
-                        {Math.round(percentage)}%
-                      </Typography>
-                    </Box>
-                  </CardContent>
-                </CardActionArea>
-                {currentUser && book.uploadedBy === currentUser.id && (
-                  <IconButton
-                    size="small"
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(book.id); setDeleteDialogOpen(true); }}
-                    sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'error.dark' } }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                )}
-              </Card>
+              <Box key={book.id} sx={{ minWidth: 180, maxWidth: 180, flexShrink: 0 }}>
+                {renderBookCard(book, { showProgress: percentage })}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* 稍後閱讀 */}
+      {readLaterBooks.length > 0 && (
+        <Box sx={{ mb: 5 }}>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            稍後閱讀
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 1, '::-webkit-scrollbar': { height: 6 }, '::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.2)', borderRadius: 3 } }}>
+            {readLaterBooks.map((book) => (
+              <Box key={book.id} sx={{ minWidth: 180, maxWidth: 180, flexShrink: 0 }}>
+                {renderBookCard(book)}
+              </Box>
             ))}
           </Box>
         </Box>
       )}
 
       {/* 書庫 */}
-      <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-        {continueReading.length > 0 ? '尚未閱讀' : '書庫'}
-      </Typography>
+      {otherBooks.length > 0 && (
+        <>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            書庫
+          </Typography>
+          <Grid container spacing={2}>
+            {otherBooks.map((book) => (
+              <Grid item xs={6} sm={4} md={3} lg={2} key={book.id}>
+                {renderBookCard(book)}
+              </Grid>
+            ))}
+          </Grid>
+        </>
+      )}
 
-      {unreadBooks.length > 0 ? (
-        <Grid container spacing={2}>
-          {unreadBooks.map((book) => (
-            <Grid item xs={6} sm={4} md={3} lg={2} key={book.id}>
-              <Card
-                sx={{
-                  height: '100%',
-                  position: 'relative',
-                  transition: 'transform 0.2s',
-                  '&:hover': { transform: 'scale(1.03)' },
-                }}
-              >
-                <CardActionArea onClick={() => navigate(`/read/${book.id}`)}>
-                  <BookCover book={book} height={240} />
-                  <CardContent sx={{ p: 1.5 }}>
-                    <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
-                      {book.title}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                      <Typography variant="caption" color="text.secondary" noWrap sx={{ flex: 1 }}>
-                        {book.author}
-                      </Typography>
-                      <Chip label={formatLabel(book.format)} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
-                    </Box>
-                  </CardContent>
-                </CardActionArea>
-                {currentUser && book.uploadedBy === currentUser.id && (
-                  <IconButton
-                    size="small"
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(book.id); setDeleteDialogOpen(true); }}
-                    sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'error.dark' } }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                )}
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      ) : books.length > 0 ? null : (
+      {books.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h6" color="text.secondary">
             還沒有書，上傳你的第一本書吧！

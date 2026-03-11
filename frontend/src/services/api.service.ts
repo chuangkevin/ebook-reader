@@ -77,6 +77,17 @@ class ApiService {
     const { data } = await api.put(`/users/${userId}/books/${bookId}/progress`, { cfi, percentage });
     return data;
   }
+
+  // Bookmarks
+  async getBookmarks(userId: string): Promise<string[]> {
+    const { data } = await api.get(`/users/${userId}/bookmarks`);
+    return data;
+  }
+
+  async toggleBookmark(userId: string, bookId: string): Promise<{ bookmarked: boolean }> {
+    const { data } = await api.post(`/users/${userId}/books/${bookId}/bookmark`);
+    return data;
+  }
 }
 
 export default new ApiService();

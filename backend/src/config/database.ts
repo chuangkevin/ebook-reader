@@ -80,12 +80,25 @@ export function initDatabase(): void {
     )
   `);
 
+  // Bookmarks (稍後閱讀)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      user_id TEXT NOT NULL,
+      book_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, book_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+    )
+  `);
+
   // Indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_reading_progress_user ON reading_progress(user_id);
     CREATE INDEX IF NOT EXISTS idx_reading_progress_book ON reading_progress(book_id);
     CREATE INDEX IF NOT EXISTS idx_books_uploaded_by ON books(uploaded_by);
     CREATE INDEX IF NOT EXISTS idx_books_uploaded_at ON books(uploaded_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id);
   `);
 
   console.log('Database initialized successfully');

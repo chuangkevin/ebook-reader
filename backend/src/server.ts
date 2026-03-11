@@ -12,6 +12,7 @@ import logger from './utils/logger';
 import userRoutes from './routes/user.routes';
 import bookRoutes from './routes/book.routes';
 import progressRoutes from './routes/progress.routes';
+import bookmarkRoutes from './routes/bookmark.routes';
 
 const ensureDirectories = () => {
   const dirs = [
@@ -64,6 +65,7 @@ app.get('/api', (_req, res) => {
 app.use('/api', userRoutes);
 app.use('/api', bookRoutes);
 app.use('/api', progressRoutes);
+app.use('/api', bookmarkRoutes);
 
 // Error handlers
 app.use(notFoundHandler);
