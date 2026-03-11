@@ -42,28 +42,56 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
       });
   }, [url, settings.convertToTraditional]);
 
+  const isVertical = settings.writingMode === 'vertical';
+
   // Restore scroll position after content loads
   useEffect(() => {
     if (!content || restoredRef.current || !containerRef.current) return;
-    if (initialPercentage > 0) {
+    // Wait for layout to settle
+    requestAnimationFrame(() => {
       const el = containerRef.current;
-      const scrollTarget = (el.scrollHeight - el.clientHeight) * (initialPercentage / 100);
-      el.scrollTop = scrollTarget;
-    }
-    restoredRef.current = true;
-  }, [content, initialPercentage]);
+      if (!el) return;
+      if (isVertical) {
+        // vertical-rl: scrollLeft=0 是最左邊（文章結尾）
+        // 閱讀起點在最右邊（scrollLeft 最大值）
+        const scrollable = el.scrollWidth - el.clientWidth;
+        if (initialPercentage > 0) {
+          // 從右往左：0% = 最右（scrollLeft=scrollable），100% = 最左（scrollLeft=0）
+          el.scrollLeft = scrollable * (1 - initialPercentage / 100);
+        } else {
+          // 第一次閱讀，捲到最右邊（起點）
+          el.scrollLeft = scrollable;
+        }
+      } else {
+        if (initialPercentage > 0) {
+          const scrollable = el.scrollHeight - el.clientHeight;
+          el.scrollTop = scrollable * (initialPercentage / 100);
+        }
+      }
+      restoredRef.current = true;
+    });
+  }, [content, initialPercentage, isVertical]);
 
   // Track scroll progress
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const scrollable = el.scrollHeight - el.clientHeight;
-    if (scrollable <= 0) return;
-    const pct = Math.round((el.scrollTop / scrollable) * 100);
-    onProgressChange(pct);
-  }, [onProgressChange]);
 
-  // Tap navigation: left = scroll up, right = scroll down, center = toggle bar
+    if (isVertical) {
+      // vertical-rl: scrollLeft 從 scrollable（最右=起點）到 0（最左=結尾）
+      const scrollable = el.scrollWidth - el.clientWidth;
+      if (scrollable <= 0) return;
+      const pct = Math.round(((scrollable - el.scrollLeft) / scrollable) * 100);
+      onProgressChange(pct);
+    } else {
+      const scrollable = el.scrollHeight - el.clientHeight;
+      if (scrollable <= 0) return;
+      const pct = Math.round((el.scrollTop / scrollable) * 100);
+      onProgressChange(pct);
+    }
+  }, [onProgressChange, isVertical]);
+
+  // Tap navigation
   const handleTap = useCallback((e: React.MouseEvent) => {
     const el = containerRef.current;
     if (!el) return;
@@ -71,16 +99,28 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
     const rect = el.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const zone = x / rect.width;
-    const pageHeight = el.clientHeight * 0.85;
 
-    if (zone < 0.3) {
-      el.scrollBy({ top: -pageHeight, behavior: 'smooth' });
-    } else if (zone > 0.7) {
-      el.scrollBy({ top: pageHeight, behavior: 'smooth' });
+    if (isVertical) {
+      // 直排：點左邊 = 下一頁（往左捲，scrollLeft 減少），點右邊 = 上一頁（往右捲，scrollLeft 增加）
+      const pageWidth = el.clientWidth * 0.85;
+      if (zone < 0.3) {
+        el.scrollBy({ left: -pageWidth, behavior: 'smooth' });  // 下一頁
+      } else if (zone > 0.7) {
+        el.scrollBy({ left: pageWidth, behavior: 'smooth' });   // 上一頁
+      } else {
+        onToggleBar();
+      }
     } else {
-      onToggleBar();
+      const pageHeight = el.clientHeight * 0.85;
+      if (zone < 0.3) {
+        el.scrollBy({ top: -pageHeight, behavior: 'smooth' });
+      } else if (zone > 0.7) {
+        el.scrollBy({ top: pageHeight, behavior: 'smooth' });
+      } else {
+        onToggleBar();
+      }
     }
-  }, [onToggleBar]);
+  }, [onToggleBar, isVertical]);
 
   if (loading) {
     return (
@@ -90,11 +130,10 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
     );
   }
 
-  const isVertical = settings.writingMode === 'vertical';
-
   return (
     <Box
       ref={containerRef}
+      data-txt-container
       onScroll={handleScroll}
       onClick={handleTap}
       sx={{

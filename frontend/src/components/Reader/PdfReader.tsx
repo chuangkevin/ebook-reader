@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { Document, Page, pdfjs } from 'react-pdf';
 import {
@@ -43,6 +43,21 @@ export default function PdfReader({ url, initialPage, onProgressChange, onToggle
     const pct = Math.round((page / numPages) * 100);
     onProgressChange(page, pct);
   }, [numPages, onProgressChange]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToPage(pageNumber - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goToPage(pageNumber + 1);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [goToPage, pageNumber]);
 
   // Tap navigation: left = prev, right = next, center = toggle bar
   const handleTap = useCallback((e: React.MouseEvent) => {

@@ -11,6 +11,8 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SettingsIcon from '@mui/icons-material/Settings';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { ReactReader } from 'react-reader';
 import type { RootState } from '../../store';
 import apiService from '../../services/api.service';
@@ -141,30 +143,61 @@ export default function BookReader() {
     setShowBar(prev => !prev);
   }, []);
 
+  // Unified prev/next for keyboard & side buttons
+  const goPrev = useCallback(() => {
+    if (book?.format === 'epub') {
+      renditionRef.current?.prev();
+    } else if (book?.format === 'txt') {
+      const el = document.querySelector('[data-txt-container]') as HTMLElement;
+      if (!el) return;
+      const isVert = settings.writingMode === 'vertical';
+      if (isVert) {
+        // 直排：「上一頁」= 向右捲（scrollLeft 往正方向）
+        el.scrollBy({ left: el.clientWidth * 0.85, behavior: 'smooth' });
+      } else {
+        el.scrollBy({ top: -el.clientHeight * 0.85, behavior: 'smooth' });
+      }
+    }
+  }, [book?.format, settings.writingMode]);
+
+  const goNext = useCallback(() => {
+    if (book?.format === 'epub') {
+      renditionRef.current?.next();
+    } else if (book?.format === 'txt') {
+      const el = document.querySelector('[data-txt-container]') as HTMLElement;
+      if (!el) return;
+      const isVert = settings.writingMode === 'vertical';
+      if (isVert) {
+        // 直排：「下一頁」= 向左捲（scrollLeft 往負方向）
+        el.scrollBy({ left: -el.clientWidth * 0.85, behavior: 'smooth' });
+      } else {
+        el.scrollBy({ top: el.clientHeight * 0.85, behavior: 'smooth' });
+      }
+    }
+  }, [book?.format, settings.writingMode]);
+
+  // Keyboard arrow keys
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (settingsOpen) return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goPrev();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goNext();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [goPrev, goNext, settingsOpen]);
+
   // --- EPUB handlers ---
   const handleEpubLocationChanged = useCallback((newCfi: string) => {
     setLocation(newCfi);
     locationRef.current = newCfi;
     save(newCfi, percentageRef.current);
   }, [save]);
-
-  // --- EPUB tap navigation ---
-  const handleEpubTapNav = useCallback((e: React.MouseEvent) => {
-    const rendition = renditionRef.current;
-    if (!rendition || settingsOpen) return;
-
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const zone = x / rect.width;
-
-    if (zone < 0.3) {
-      rendition.prev();
-    } else if (zone > 0.7) {
-      rendition.next();
-    } else {
-      handleToggleBar();
-    }
-  }, [settingsOpen, handleToggleBar]);
 
   // --- PDF handlers ---
   const handlePdfProgressChange = useCallback((page: number, pct: number) => {
@@ -218,7 +251,7 @@ export default function BookReader() {
       default:
         if (!epubData) return null;
         return (
-          <Box sx={{ flex: 1, height: '100%' }} onClick={handleEpubTapNav}>
+          <Box sx={{ flex: 1, height: '100%' }}>
             <ReactReader
               url={epubData}
               location={location}
@@ -242,6 +275,11 @@ export default function BookReader() {
                     'font-size': `${settings.fontSize}px !important`,
                     'line-height': `${settings.lineHeight} !important`,
                   },
+                });
+
+                // 點擊 EPUB 內容區域 → 切換工具列
+                rendition.on('click', () => {
+                  handleToggleBar();
                 });
 
                 rendition.on('relocated', (loc: { start: { percentage: number } }) => {
@@ -306,8 +344,56 @@ export default function BookReader() {
       </AppBar>
 
       {/* Reader */}
-      <Box sx={{ flex: 1 }}>
+      <Box sx={{ flex: 1, position: 'relative' }}>
         {renderReader()}
+
+        {/* Desktop side nav buttons for TXT (EPUB has ReactReader's built-in arrows) */}
+        {book.format === 'txt' && (
+          <>
+            <IconButton
+              onClick={goPrev}
+              sx={{
+                position: 'fixed',
+                left: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                bgcolor: 'rgba(0,0,0,0.3)',
+                color: '#fff',
+                opacity: 0.15,
+                transition: 'opacity 0.3s',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.6)', opacity: 1 },
+                width: 48,
+                height: 80,
+                borderRadius: 2,
+                display: { xs: 'none', md: 'flex' },
+                zIndex: 10,
+              }}
+            >
+              <ChevronLeftIcon fontSize="large" />
+            </IconButton>
+            <IconButton
+              onClick={goNext}
+              sx={{
+                position: 'fixed',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                bgcolor: 'rgba(0,0,0,0.3)',
+                color: '#fff',
+                opacity: 0.15,
+                transition: 'opacity 0.3s',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.6)', opacity: 1 },
+                width: 48,
+                height: 80,
+                borderRadius: 2,
+                display: { xs: 'none', md: 'flex' },
+                zIndex: 10,
+              }}
+            >
+              <ChevronRightIcon fontSize="large" />
+            </IconButton>
+          </>
+        )}
       </Box>
 
       {/* Settings Drawer */}
