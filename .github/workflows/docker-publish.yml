@@ -8,7 +8,7 @@ on:
       - 'frontend/**'
       - 'backend/**'
       - 'docker-compose*.yml'
-      - '.github/workflows/docker-publish.yml'
+      - '.github/workflows/*.yml'
   workflow_dispatch:
 
 env:
