@@ -1,0 +1,51 @@
+services:
+  backend:
+    image: kevin950805/ebook-reader-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    container_name: ebook-reader-backend
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/app/data/db/ebook-reader.sqlite
+      - BOOKS_DIR=/app/data/books
+      - COVERS_DIR=/app/data/covers
+      - ALLOWED_ORIGINS=*
+    volumes:
+      - ./data/db:/app/data/db
+      - ./data/books:/app/data/books
+      - ./data/covers:/app/data/covers
+    restart: unless-stopped
+    networks:
+      - ebook-reader-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    image: kevin950805/ebook-reader-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    container_name: ebook-reader-frontend
+    ports:
+      - "3124:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ebook-reader-network
+
+networks:
+  ebook-reader-network:
+    driver: bridge
