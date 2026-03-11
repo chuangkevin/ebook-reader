@@ -27,6 +27,11 @@ class BookService {
     return row ? this.mapRow(row) : null;
   }
 
+  checkDuplicate(title: string): Book | null {
+    const row = db.prepare('SELECT * FROM books WHERE title = ?').get(title) as BookRow | undefined;
+    return row ? this.mapRow(row) : null;
+  }
+
   async create(filePath: string, fileSize: number, uploadedBy: string, originalName: string, format: BookFormat): Promise<Book> {
     const id = crypto.randomUUID();
     const now = Date.now();
@@ -39,6 +44,14 @@ class BookService {
       logger.warn(`Failed to extract metadata, using filename: ${error}`);
       const ext = path.extname(originalName);
       metadata = { title: path.basename(originalName, ext), author: 'Unknown' };
+    }
+
+    // 檢查重複書名
+    const existing = this.checkDuplicate(metadata.title);
+    if (existing) {
+      // 清理已上傳的檔案
+      fs.unlinkSync(filePath);
+      throw new Error(`DUPLICATE:${metadata.title}`);
     }
 
     // Extract cover (EPUB and PDF only)
@@ -144,22 +157,74 @@ class BookService {
     const zip = new AdmZip(filePath);
     const entries = zip.getEntries();
 
-    const coverPatterns = [/cover\.(jpg|jpeg|png|gif)/i, /cover-image/i, /frontcover/i];
-    let coverEntry = null;
+    // Step 1: 從 OPF 的 <meta name="cover"> 找到 cover image id，再從 manifest 找到對應檔案路徑
+    let coverHref: string | null = null;
+    let opfDir = '';
 
     for (const entry of entries) {
-      const name = entry.entryName.toLowerCase();
-      if (coverPatterns.some(p => p.test(name))) {
-        coverEntry = entry;
+      if (entry.entryName.endsWith('.opf')) {
+        const opf = entry.getData().toString('utf8');
+        opfDir = entry.entryName.replace(/[^/]*$/, '');
+
+        // 找 <meta name="cover" content="coverId" />
+        const coverMeta = opf.match(/<meta[^>]*name\s*=\s*["']cover["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i)
+          || opf.match(/<meta[^>]*content\s*=\s*["']([^"']+)["'][^>]*name\s*=\s*["']cover["'][^>]*>/i);
+
+        if (coverMeta) {
+          const coverId = coverMeta[1];
+          // 從 manifest 找對應的 item
+          const itemRegex = new RegExp(`<item[^>]*id\\s*=\\s*["']${coverId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*href\\s*=\\s*["']([^"']+)["']`, 'i');
+          const itemMatch = opf.match(itemRegex);
+          if (!itemMatch) {
+            // 試另一種屬性順序
+            const altRegex = new RegExp(`<item[^>]*href\\s*=\\s*["']([^"']+)["'][^>]*id\\s*=\\s*["']${coverId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`, 'i');
+            const altMatch = opf.match(altRegex);
+            if (altMatch) coverHref = altMatch[1];
+          } else {
+            coverHref = itemMatch[1];
+          }
+        }
+
+        // Step 2: 沒有 meta cover 的話，找 manifest 中 properties="cover-image" 的 item（EPUB3）
+        if (!coverHref) {
+          const coverImgItem = opf.match(/<item[^>]*properties\s*=\s*["']cover-image["'][^>]*href\s*=\s*["']([^"']+)["']/i)
+            || opf.match(/<item[^>]*href\s*=\s*["']([^"']+)["'][^>]*properties\s*=\s*["']cover-image["']/i);
+          if (coverImgItem) coverHref = coverImgItem[1];
+        }
+
         break;
       }
     }
 
+    // 解析出完整路徑
+    let coverEntry = null;
+    if (coverHref) {
+      const fullPath = opfDir + coverHref;
+      coverEntry = entries.find(e => e.entryName === fullPath)
+        || entries.find(e => e.entryName.toLowerCase() === fullPath.toLowerCase());
+    }
+
+    // Step 3: fallback - 用檔名 pattern 找
     if (!coverEntry) {
+      // 優先找含 cover 且是圖片的（排除 .xhtml/.html）
       for (const entry of entries) {
-        if (/\.(jpg|jpeg|png|gif)$/i.test(entry.entryName)) {
+        if (/cover.*\.(jpg|jpeg|png|gif)$/i.test(entry.entryName) && !/\.xhtml?$/i.test(entry.entryName)) {
           coverEntry = entry;
           break;
+        }
+      }
+    }
+
+    // Step 4: fallback - 找最大的圖片檔（封面通常最大）
+    if (!coverEntry) {
+      let maxSize = 0;
+      for (const entry of entries) {
+        if (/\.(jpg|jpeg|png|gif)$/i.test(entry.entryName)) {
+          const size = entry.getData().length;
+          if (size > maxSize) {
+            maxSize = size;
+            coverEntry = entry;
+          }
         }
       }
     }

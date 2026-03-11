@@ -55,10 +55,19 @@ class BookController {
       );
       res.status(201).json(book);
     } catch (error) {
-      // Clean up uploaded file on error
+      // Clean up uploaded file on error (service 已自行清理重複的情況)
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
+
+      // 重複書名
+      const errMsg = error instanceof Error ? error.message : '';
+      if (errMsg.startsWith('DUPLICATE:')) {
+        const title = errMsg.replace('DUPLICATE:', '');
+        res.status(409).json({ error: `「${title}」已存在書庫中` });
+        return;
+      }
+
       logger.error('Failed to upload book:', error);
       res.status(500).json({ error: 'Failed to upload book' });
     }
