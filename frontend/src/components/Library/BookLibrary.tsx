@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -34,6 +34,31 @@ import { selectUser } from '../../store/userSlice';
 import apiService from '../../services/api.service';
 import type { Book } from '../../types';
 
+function useTextConverter() {
+  const convertToTraditional = useSelector((state: RootState) => state.settings.convertToTraditional);
+  const converterRef = useRef<((text: string) => string) | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (convertToTraditional) {
+      import('opencc-js').then((OpenCC) => {
+        converterRef.current = OpenCC.Converter({ from: 'cn', to: 'tw' });
+        setReady(true);
+      });
+    } else {
+      converterRef.current = null;
+      setReady(false);
+    }
+  }, [convertToTraditional]);
+
+  const convert = useCallback((text: string) => {
+    if (converterRef.current && ready) return converterRef.current(text);
+    return text;
+  }, [ready]);
+
+  return convert;
+}
+
 function BookCover({ book, height }: { book: Book; height: number }) {
   return (
     <CardMedia
@@ -56,6 +81,7 @@ export default function BookLibrary() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const convert = useTextConverter();
 
   useEffect(() => {
     dispatch(fetchBooks());
@@ -166,11 +192,11 @@ export default function BookLibrary() {
         <BookCover book={book} height={240} />
         <CardContent sx={{ p: 1.5 }}>
           <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-            {book.title}
+            {convert(book.title)}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
             <Typography variant="caption" color="text.secondary" noWrap sx={{ flex: 1 }}>
-              {book.author}
+              {convert(book.author)}
             </Typography>
             <Chip label={book.format.toUpperCase()} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
           </Box>
