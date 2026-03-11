@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import jschardet from 'jschardet';
+import iconv from 'iconv-lite';
 import bookService from '../services/book.service';
 import { getFormatFromFilename } from '../middleware/upload.middleware';
 import logger from '../utils/logger';
@@ -106,10 +108,26 @@ class BookController {
         return;
       }
 
+      // TXT 檔案需偵測編碼並轉為 UTF-8
+      if (book.format === 'txt') {
+        const buf = fs.readFileSync(book.filePath);
+        const detected = jschardet.detect(buf);
+        const encoding = detected.encoding || 'utf-8';
+        let text: string;
+        if (encoding.toLowerCase() === 'utf-8' || encoding.toLowerCase() === 'ascii') {
+          text = buf.toString('utf8');
+        } else {
+          text = iconv.decode(buf, encoding);
+        }
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(book.title)}.txt"`);
+        res.send(text);
+        return;
+      }
+
       const contentTypes: Record<string, string> = {
         epub: 'application/epub+zip',
         pdf: 'application/pdf',
-        txt: 'text/plain; charset=utf-8',
       };
       res.setHeader('Content-Type', contentTypes[book.format] || 'application/octet-stream');
       res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(book.title)}.${book.format}"`);
