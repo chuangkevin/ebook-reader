@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { Document, Page, pdfjs } from 'react-pdf';
 import {
@@ -11,6 +11,7 @@ import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import type { RootState } from '../../store';
 import { readerThemes } from '../../utils/readerThemes';
+import { getTapAction } from '../../utils/navigation';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -23,12 +24,19 @@ interface PdfReaderProps {
   onToggleBar: () => void;
 }
 
+const SWIPE_THRESHOLD = 50;
+const SWIPE_TIME_LIMIT = 500;
+
 export default function PdfReader({ url, initialPage, onProgressChange, onToggleBar }: PdfReaderProps) {
   const settings = useSelector((state: RootState) => state.settings);
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(initialPage || 1);
 
   const theme = readerThemes[settings.themeMode];
+
+  // Touch/swipe tracking
+  const touchRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchHandledRef = useRef(false);
 
   const onDocumentLoadSuccess = useCallback(({ numPages: total }: { numPages: number }) => {
     setNumPages(total);
@@ -44,13 +52,26 @@ export default function PdfReader({ url, initialPage, onProgressChange, onToggle
     onProgressChange(page, pct);
   }, [numPages, onProgressChange]);
 
-  // Keyboard navigation
+  // Keyboard navigation (PageUp/Down, arrows, volume keys)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'PageUp':
+          e.preventDefault();
+          goToPage(pageNumber - 1);
+          return;
+        case 'ArrowRight':
+        case 'PageDown':
+        case ' ':
+          e.preventDefault();
+          goToPage(pageNumber + 1);
+          return;
+      }
+      if (e.keyCode === 24) { // Volume Up
         e.preventDefault();
         goToPage(pageNumber - 1);
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.keyCode === 25) { // Volume Down
         e.preventDefault();
         goToPage(pageNumber + 1);
       }
@@ -59,24 +80,72 @@ export default function PdfReader({ url, initialPage, onProgressChange, onToggle
     return () => window.removeEventListener('keydown', handleKey);
   }, [goToPage, pageNumber]);
 
-  // Tap navigation: left = prev, right = next, center = toggle bar
+  // Tap navigation with tap zone layout support
   const handleTap = useCallback((e: React.MouseEvent) => {
+    // Skip if touch already handled this interaction
+    if (touchHandledRef.current) {
+      touchHandledRef.current = false;
+      return;
+    }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = e.clientX - rect.left;
     const zone = x / rect.width;
+    const action = getTapAction(zone, settings.tapZoneLayout);
 
-    if (zone < 0.3) {
-      goToPage(pageNumber - 1);
-    } else if (zone > 0.7) {
-      goToPage(pageNumber + 1);
-    } else {
-      onToggleBar();
+    switch (action) {
+      case 'prev': goToPage(pageNumber - 1); break;
+      case 'next': goToPage(pageNumber + 1); break;
+      case 'toggle': onToggleBar(); break;
     }
-  }, [goToPage, pageNumber, onToggleBar]);
+  }, [goToPage, pageNumber, onToggleBar, settings.tapZoneLayout]);
+
+  // Swipe handlers for mobile
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    touchHandledRef.current = false;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!touchRef.current) return;
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchRef.current.x;
+    const deltaY = touch.clientY - touchRef.current.y;
+    const elapsed = Date.now() - touchRef.current.time;
+    touchRef.current = null;
+
+    // Swipe detection
+    if (Math.abs(deltaX) > SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY) && elapsed < SWIPE_TIME_LIMIT) {
+      touchHandledRef.current = true;
+      if (deltaX < 0) {
+        goToPage(pageNumber + 1); // swipe left → next
+      } else {
+        goToPage(pageNumber - 1); // swipe right → prev
+      }
+      return;
+    }
+
+    // Tap detection (small movement = tap)
+    if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
+      touchHandledRef.current = true;
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const zone = x / rect.width;
+      const action = getTapAction(zone, settings.tapZoneLayout);
+
+      switch (action) {
+        case 'prev': goToPage(pageNumber - 1); break;
+        case 'next': goToPage(pageNumber + 1); break;
+        case 'toggle': onToggleBar(); break;
+      }
+    }
+  }, [goToPage, pageNumber, onToggleBar, settings.tapZoneLayout]);
 
   return (
     <Box
       onClick={handleTap}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       sx={{
         height: '100%',
         display: 'flex',
@@ -84,6 +153,8 @@ export default function PdfReader({ url, initialPage, onProgressChange, onToggle
         alignItems: 'center',
         overflow: 'auto',
         bgcolor: theme.bg,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
       <Document

@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import type { RootState } from '../../store';
 import { readerThemes } from '../../utils/readerThemes';
+import { getTapAction } from '../../utils/navigation';
 
 interface TxtReaderProps {
   url: string;
@@ -91,7 +92,7 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
     }
   }, [onProgressChange, isVertical]);
 
-  // Tap navigation
+  // Tap navigation with tap zone layout support
   const handleTap = useCallback((e: React.MouseEvent) => {
     const el = containerRef.current;
     if (!el) return;
@@ -99,28 +100,29 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
     const rect = el.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const zone = x / rect.width;
+    const action = getTapAction(zone, settings.tapZoneLayout);
+
+    if (action === 'toggle') {
+      onToggleBar();
+      return;
+    }
 
     if (isVertical) {
-      // 直排：點左邊 = 下一頁（往左捲，scrollLeft 減少），點右邊 = 上一頁（往右捲，scrollLeft 增加）
       const pageWidth = el.clientWidth * 0.85;
-      if (zone < 0.3) {
-        el.scrollBy({ left: -pageWidth, behavior: 'smooth' });  // 下一頁
-      } else if (zone > 0.7) {
-        el.scrollBy({ left: pageWidth, behavior: 'smooth' });   // 上一頁
+      if (action === 'next') {
+        el.scrollBy({ left: -pageWidth, behavior: 'smooth' });
       } else {
-        onToggleBar();
+        el.scrollBy({ left: pageWidth, behavior: 'smooth' });
       }
     } else {
       const pageHeight = el.clientHeight * 0.85;
-      if (zone < 0.3) {
-        el.scrollBy({ top: -pageHeight, behavior: 'smooth' });
-      } else if (zone > 0.7) {
+      if (action === 'next') {
         el.scrollBy({ top: pageHeight, behavior: 'smooth' });
       } else {
-        onToggleBar();
+        el.scrollBy({ top: -pageHeight, behavior: 'smooth' });
       }
     }
-  }, [onToggleBar, isVertical]);
+  }, [onToggleBar, isVertical, settings.tapZoneLayout]);
 
   if (loading) {
     return (
@@ -143,6 +145,8 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
         maxWidth: isVertical ? 'none' : 800,
         mx: 'auto',
         bgcolor: theme.bg,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
       <Typography

@@ -20,8 +20,10 @@ import {
   setLineHeight,
   setWritingMode,
   setConvertToTraditional,
+  setTapZoneLayout,
   type ThemeMode,
   type WritingMode,
+  type TapZoneLayout,
 } from '../../store/settingsSlice';
 
 interface ReaderSettingsProps {
@@ -124,6 +126,22 @@ export default function ReaderSettings({ open, onClose }: ReaderSettingsProps) {
         >
           <ToggleButton value="horizontal">橫排</ToggleButton>
           <ToggleButton value="vertical">直排</ToggleButton>
+        </ToggleButtonGroup>
+
+        {/* Tap Zone Layout */}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          翻頁區域
+        </Typography>
+        <ToggleButtonGroup
+          value={settings.tapZoneLayout}
+          exclusive
+          onChange={(_, val) => val && dispatch(setTapZoneLayout(val as TapZoneLayout))}
+          fullWidth
+          sx={{ mb: 3 }}
+        >
+          <ToggleButton value="default">預設</ToggleButton>
+          <ToggleButton value="left-hand">左手</ToggleButton>
+          <ToggleButton value="right-hand">右手</ToggleButton>
         </ToggleButtonGroup>
 
         {/* Simplified to Traditional */}

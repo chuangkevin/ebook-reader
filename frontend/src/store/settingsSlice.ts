@@ -2,6 +2,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 export type ThemeMode = 'dark' | 'light' | 'sepia';
 export type WritingMode = 'horizontal' | 'vertical';
+export type TapZoneLayout = 'default' | 'left-hand' | 'right-hand';
 
 export interface ReaderSettings {
   themeMode: ThemeMode;
@@ -9,6 +10,7 @@ export interface ReaderSettings {
   lineHeight: number;     // multiplier
   writingMode: WritingMode;
   convertToTraditional: boolean;
+  tapZoneLayout: TapZoneLayout;
 }
 
 const STORAGE_KEY = 'ebook-reader-settings';
@@ -19,6 +21,7 @@ const defaultSettings: ReaderSettings = {
   lineHeight: 1.8,
   writingMode: 'horizontal',
   convertToTraditional: true,
+  tapZoneLayout: 'default',
 };
 
 function loadSettings(): ReaderSettings {
@@ -57,8 +60,12 @@ const settingsSlice = createSlice({
       state.convertToTraditional = action.payload;
       saveSettings(state);
     },
+    setTapZoneLayout(state, action: PayloadAction<TapZoneLayout>) {
+      state.tapZoneLayout = action.payload;
+      saveSettings(state);
+    },
   },
 });
 
-export const { setThemeMode, setFontSize, setLineHeight, setWritingMode, setConvertToTraditional } = settingsSlice.actions;
+export const { setThemeMode, setFontSize, setLineHeight, setWritingMode, setConvertToTraditional, setTapZoneLayout } = settingsSlice.actions;
 export default settingsSlice.reducer;

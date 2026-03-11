@@ -13,12 +13,13 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { ReactReader } from 'react-reader';
+import { ReactReader, ReactReaderStyle } from 'react-reader';
 import type { RootState } from '../../store';
 import apiService from '../../services/api.service';
 import { useProgressSync } from '../../hooks/useProgressSync';
 import type { Book } from '../../types';
 import { readerThemes } from '../../utils/readerThemes';
+import { getTapAction } from '../../utils/navigation';
 import PdfReader from './PdfReader';
 import TxtReader from './TxtReader';
 import ReaderSettings from './ReaderSettings';
@@ -55,6 +56,12 @@ export default function BookReader() {
   const locationRef = useRef<string | null>(null);
   const percentageRef = useRef(0);
   const renditionRef = useRef<EpubRendition | null>(null);
+
+  // Refs for stable closure in rendition callbacks
+  const goPrevRef = useRef<() => void>(() => {});
+  const goNextRef = useRef<() => void>(() => {});
+  const handleToggleBarRef = useRef<() => void>(() => {});
+  const tapZoneLayoutRef = useRef(settings.tapZoneLayout);
 
   const { save } = useProgressSync(currentUser?.id || '', bookId || '');
 
@@ -121,6 +128,8 @@ export default function BookReader() {
         'font-size': `${settings.fontSize}px !important`,
         'line-height': `${settings.lineHeight} !important`,
         'writing-mode': settings.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+        '-webkit-user-select': 'none !important',
+        'user-select': 'none !important',
       },
       'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
         'font-size': `${settings.fontSize}px !important`,
@@ -152,7 +161,6 @@ export default function BookReader() {
       if (!el) return;
       const isVert = settings.writingMode === 'vertical';
       if (isVert) {
-        // 直排：「上一頁」= 向右捲（scrollLeft 往正方向）
         el.scrollBy({ left: el.clientWidth * 0.85, behavior: 'smooth' });
       } else {
         el.scrollBy({ top: -el.clientHeight * 0.85, behavior: 'smooth' });
@@ -168,7 +176,6 @@ export default function BookReader() {
       if (!el) return;
       const isVert = settings.writingMode === 'vertical';
       if (isVert) {
-        // 直排：「下一頁」= 向左捲（scrollLeft 往負方向）
         el.scrollBy({ left: -el.clientWidth * 0.85, behavior: 'smooth' });
       } else {
         el.scrollBy({ top: el.clientHeight * 0.85, behavior: 'smooth' });
@@ -176,14 +183,36 @@ export default function BookReader() {
     }
   }, [book?.format, settings.writingMode]);
 
-  // Keyboard arrow keys
+  // Keep refs in sync for rendition callbacks
+  useEffect(() => { goPrevRef.current = goPrev; }, [goPrev]);
+  useEffect(() => { goNextRef.current = goNext; }, [goNext]);
+  useEffect(() => { handleToggleBarRef.current = handleToggleBar; }, [handleToggleBar]);
+  useEffect(() => { tapZoneLayoutRef.current = settings.tapZoneLayout; }, [settings.tapZoneLayout]);
+
+  // Keyboard: Arrow keys, PageUp/Down, Space, Volume keys, Boox buttons
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (settingsOpen) return;
-      if (e.key === 'ArrowLeft') {
+
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'PageUp':
+          e.preventDefault();
+          goPrev();
+          return;
+        case 'ArrowRight':
+        case 'PageDown':
+        case ' ':
+          e.preventDefault();
+          goNext();
+          return;
+      }
+
+      // Volume keys (Android/Boox) — use keyCode since key name varies
+      if (e.keyCode === 24) { // Volume Up → prev page
         e.preventDefault();
         goPrev();
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.keyCode === 25) { // Volume Down → next page
         e.preventDefault();
         goNext();
       }
@@ -256,13 +285,20 @@ export default function BookReader() {
               url={epubData}
               location={location}
               locationChanged={handleEpubLocationChanged}
+              swipeable
               epubOptions={{
                 allowScriptedContent: true,
+                flow: 'paginated',
+              }}
+              readerStyles={{
+                ...ReactReaderStyle,
+                prev: { ...ReactReaderStyle.prev, display: 'none' },
+                next: { ...ReactReaderStyle.next, display: 'none' },
               }}
               getRendition={(rendition) => {
                 renditionRef.current = rendition as unknown as EpubRendition;
 
-                // Apply initial styles
+                // Apply initial styles (including user-select: none)
                 rendition.themes.default({
                   body: {
                     'background-color': `${theme.bg} !important`,
@@ -270,6 +306,8 @@ export default function BookReader() {
                     'font-size': `${settings.fontSize}px !important`,
                     'line-height': `${settings.lineHeight} !important`,
                     'writing-mode': settings.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                    '-webkit-user-select': 'none !important',
+                    'user-select': 'none !important',
                   },
                   'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
                     'font-size': `${settings.fontSize}px !important`,
@@ -277,9 +315,23 @@ export default function BookReader() {
                   },
                 });
 
-                // 點擊 EPUB 內容區域 → 切換工具列
-                rendition.on('click', () => {
-                  handleToggleBar();
+                // Tap zone navigation on EPUB content
+                rendition.on('click', (event: MouseEvent) => {
+                  const width = (event.view as Window)?.innerWidth || window.innerWidth;
+                  const zone = event.clientX / width;
+                  const action = getTapAction(zone, tapZoneLayoutRef.current);
+
+                  switch (action) {
+                    case 'prev':
+                      goPrevRef.current();
+                      break;
+                    case 'next':
+                      goNextRef.current();
+                      break;
+                    case 'toggle':
+                      handleToggleBarRef.current();
+                      break;
+                  }
                 });
 
                 rendition.on('relocated', (loc: { start: { percentage: number } }) => {
@@ -314,7 +366,14 @@ export default function BookReader() {
   };
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: theme.bg }}>
+    <Box sx={{
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      bgcolor: theme.bg,
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+    }}>
       {/* Top Bar */}
       <AppBar
         position="fixed"
@@ -347,7 +406,7 @@ export default function BookReader() {
       <Box sx={{ flex: 1, position: 'relative' }}>
         {renderReader()}
 
-        {/* Desktop side nav buttons for TXT (EPUB has ReactReader's built-in arrows) */}
+        {/* Desktop side nav buttons for TXT (EPUB has tap zones) */}
         {book.format === 'txt' && (
           <>
             <IconButton
