@@ -103,15 +103,18 @@ class BookService {
   // --- Metadata extraction ---
 
   private async extractMetadata(filePath: string, format: BookFormat, originalName: string): Promise<BookMetadata> {
+    // 從原始檔名取得書名（去除副檔名）
+    const nameFromFile = path.basename(originalName, path.extname(originalName));
+
     switch (format) {
       case 'epub':
         return this.extractEpubMetadata(filePath);
       case 'pdf':
-        return this.extractPdfMetadata(filePath);
+        return this.extractPdfMetadata(filePath, nameFromFile);
       case 'txt':
-        return { title: path.basename(originalName, '.txt'), author: 'Unknown' };
+        return { title: nameFromFile, author: 'Unknown' };
       default:
-        return { title: path.basename(originalName), author: 'Unknown' };
+        return { title: nameFromFile, author: 'Unknown' };
     }
   }
 
@@ -139,13 +142,13 @@ class BookService {
     };
   }
 
-  private async extractPdfMetadata(filePath: string): Promise<BookMetadata> {
+  private async extractPdfMetadata(filePath: string, fallbackTitle: string): Promise<BookMetadata> {
     const pdfParse = (await import('pdf-parse')).default;
     const buffer = fs.readFileSync(filePath);
-    const data = await pdfParse(buffer, { max: 0 }); // max:0 = don't parse pages, just metadata
+    const data = await pdfParse(buffer, { max: 0 });
 
     return {
-      title: data.info?.Title || path.basename(filePath, '.pdf'),
+      title: data.info?.Title || fallbackTitle,
       author: data.info?.Author || 'Unknown',
     };
   }

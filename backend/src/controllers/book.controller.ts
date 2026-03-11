@@ -45,12 +45,18 @@ class BookController {
         return;
       }
 
-      const format = getFormatFromFilename(req.file.originalname);
+      // multer 可能用 latin1 編碼非 ASCII 檔名，需要轉回 UTF-8
+      let originalName = req.file.originalname;
+      try {
+        originalName = Buffer.from(originalName, 'latin1').toString('utf8');
+      } catch { /* 保留原始值 */ }
+
+      const format = getFormatFromFilename(originalName);
       const book = await bookService.create(
         req.file.path,
         req.file.size,
         uploadedBy,
-        req.file.originalname,
+        originalName,
         format
       );
       res.status(201).json(book);
