@@ -522,6 +522,9 @@ export default function BookReader() {
                       overflow: hidden !important;
                       scrollbar-width: none !important;
                       -ms-overflow-style: none !important;
+                      column-gap: 0px !important;
+                      -webkit-column-gap: 0px !important;
+                      -moz-column-gap: 0px !important;
                     }
                     html::-webkit-scrollbar, body::-webkit-scrollbar {
                       display: none !important;
