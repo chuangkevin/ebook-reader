@@ -298,11 +298,57 @@ export default function BookReader() {
     setShowBar(prev => !prev);
   }, []);
 
+  // After silent scrolling, estimate percentage from scroll position.
+  // We avoid calling epub.js reportLocation() which triggers a full re-render.
+  const updatePageAfterScroll = useCallback(() => {
+    const r = renditionRef.current;
+    if (!r) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mgr = (r as any).manager;
+    if (!mgr) return;
+    const container = mgr.container as HTMLElement;
+    const views = mgr.views;
+    if (!views?.length) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const view = views.first() || views[0];
+    const section = view?.section;
+    if (!section) return;
+
+    const spine = r.book?.spine;
+    if (!spine) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const spineItems = (spine as any).items || (spine as any).spineItems || [];
+    const totalSections = spineItems.length || 1;
+    const sectionIndex = section.index ?? 0;
+
+    // Fraction within current section based on scroll
+    const isVert = settingsRef.current.writingMode === 'vertical';
+    let scrollFrac = 0;
+    if (isVert) {
+      const max = container.scrollHeight - container.offsetHeight;
+      scrollFrac = max > 0 ? container.scrollTop / max : 0;
+    } else {
+      const max = container.scrollWidth - container.offsetWidth;
+      scrollFrac = max > 0 ? container.scrollLeft / max : 0;
+    }
+
+    const pct = Math.round(((sectionIndex + scrollFrac) / totalSections) * 10000) / 100;
+    setPercentage(pct);
+    percentageRef.current = pct;
+
+    // Estimate page from total
+    if (totalPages > 0) {
+      const estPage = Math.round(pct / 100 * totalPages) + 1;
+      setCurrentPage(Math.min(estPage, totalPages));
+    }
+  }, [totalPages]);
+
   // Custom prev/next that scrolls the epub.js container directly.
   // epub.js's built-in next()/prev() breaks when the container has
   // direction:rtl (from book metadata) but content is horizontal-tb (LTR).
   // We use mgr.scrollTo(x,y,true) for silent scrolling (suppresses scroll
-  // events that would trigger reportLocation → setLocation → full re-render).
+  // events that would trigger a full re-render chain).
   // mgr.scrollBy() is NOT usable because it multiplies x by -1 for RTL.
   const goPrev = useCallback(() => {
     if (book?.format === 'epub') {
@@ -318,6 +364,7 @@ export default function BookReader() {
         const top = container.scrollTop;
         if (top > 0) {
           mgr.scrollTo(container.scrollLeft, Math.max(0, top - delta), true);
+          updatePageAfterScroll();
         } else {
           r.prev();
         }
@@ -325,6 +372,7 @@ export default function BookReader() {
         const scrollLeft = container.scrollLeft;
         if (scrollLeft > 0) {
           mgr.scrollTo(Math.max(0, scrollLeft - delta), 0, true);
+          updatePageAfterScroll();
         } else {
           r.prev();
         }
@@ -339,7 +387,7 @@ export default function BookReader() {
         el.scrollBy({ top: -el.clientHeight * 0.85, behavior: 'smooth' });
       }
     }
-  }, [book?.format, settings.writingMode]);
+  }, [book?.format, settings.writingMode, updatePageAfterScroll]);
 
   const goNext = useCallback(() => {
     if (book?.format === 'epub') {
@@ -356,6 +404,7 @@ export default function BookReader() {
         const maxTop = container.scrollHeight - container.offsetHeight;
         if (top < maxTop - 2) {
           mgr.scrollTo(container.scrollLeft, Math.min(maxTop, top + delta), true);
+          updatePageAfterScroll();
         } else {
           r.next();
         }
@@ -364,6 +413,7 @@ export default function BookReader() {
         const maxScroll = container.scrollWidth - container.offsetWidth;
         if (scrollLeft < maxScroll - 2) {
           mgr.scrollTo(Math.min(maxScroll, scrollLeft + delta), 0, true);
+          updatePageAfterScroll();
         } else {
           r.next();
         }
@@ -378,7 +428,7 @@ export default function BookReader() {
         el.scrollBy({ top: el.clientHeight * 0.85, behavior: 'smooth' });
       }
     }
-  }, [book?.format, settings.writingMode]);
+  }, [book?.format, settings.writingMode, updatePageAfterScroll]);
 
   // Keep refs in sync for keyboard/iframe callbacks
   useEffect(() => { goPrevRef.current = goPrev; }, [goPrev]);
