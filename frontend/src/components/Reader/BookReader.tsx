@@ -301,8 +301,10 @@ export default function BookReader() {
       const body = doc.body;
       html.style.setProperty('writing-mode', writingModeValue, 'important');
       html.style.setProperty('-webkit-writing-mode', writingModeValue, 'important');
+      html.style.setProperty('overflow', 'hidden', 'important');
       body.style.setProperty('writing-mode', writingModeValue, 'important');
       body.style.setProperty('-webkit-writing-mode', writingModeValue, 'important');
+      body.style.setProperty('overflow', 'hidden', 'important');
 
       if (writingModeValue === 'horizontal-tb') {
         // Set up CSS columns for horizontal pagination (manual scrolling)
@@ -531,10 +533,14 @@ export default function BookReader() {
         if (!epubData) return null;
         return (
           <Box sx={{
-            flex: 1, height: '100%',
+            flex: 1, height: '100%', position: 'relative',
+            overflow: 'hidden',
             // Kill react-reader's SwipeWrapper mouse/touch handlers
             '& div[style*="height: 100%"]': { pointerEvents: 'none' },
-            '& iframe': { pointerEvents: 'auto' },
+            '& iframe': { pointerEvents: 'none' }, // iframe doesn't need events — overlay handles them
+            // Hide scrollbars everywhere (iOS Safari)
+            '& *': { scrollbarWidth: 'none', msOverflowStyle: 'none' },
+            '& *::-webkit-scrollbar': { display: 'none' },
           }}>
             <ReactReader
               url={epubData}
@@ -612,6 +618,26 @@ export default function BookReader() {
                   html.style.setProperty('-webkit-writing-mode', wm, 'important');
                   body.style.setProperty('writing-mode', wm, 'important');
                   body.style.setProperty('-webkit-writing-mode', wm, 'important');
+
+                  // Hide scrollbars (critical for iOS Safari)
+                  const hideScrollbarCSS = contents.document.createElement('style');
+                  hideScrollbarCSS.textContent = `
+                    html, body {
+                      overflow: hidden !important;
+                      -webkit-overflow-scrolling: auto !important;
+                      scrollbar-width: none !important;
+                      -ms-overflow-style: none !important;
+                    }
+                    html::-webkit-scrollbar, body::-webkit-scrollbar {
+                      display: none !important;
+                      width: 0 !important;
+                      height: 0 !important;
+                    }
+                    * {
+                      -webkit-touch-callout: none !important;
+                    }
+                  `;
+                  contents.document.head.appendChild(hideScrollbarCSS);
 
                   // For horizontal override: set up CSS columns manually so content
                   // paginates correctly (epub.js's column setup breaks with overridden writing-mode)
@@ -708,6 +734,51 @@ export default function BookReader() {
                       }
                     });
                   });
+                }
+              }}
+            />
+            {/* Transparent touch overlay — captures all taps/swipes on iOS
+                where iframe click events are unreliable */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                zIndex: 3,
+                touchAction: 'pan-x', // allow horizontal swipe detection
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+              }}
+              onPointerDown={(e) => {
+                pointerDownPos.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+              }}
+              onPointerUp={(e) => {
+                if (!pointerDownPos.current || settingsOpen || tocOpen) return;
+                const dx = e.clientX - pointerDownPos.current.x;
+                const dy = e.clientY - pointerDownPos.current.y;
+                const dt = Date.now() - pointerDownPos.current.t;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                pointerDownPos.current = null;
+
+                // Swipe detection
+                if (dist > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 500) {
+                  if (dx > 0) goPrev(); else goNext();
+                  return;
+                }
+
+                // Tap detection
+                if (dist > 15) return;
+                if (navLock.current) return;
+                navLock.current = true;
+                setTimeout(() => { navLock.current = false; }, 300);
+
+                const x = e.clientX / window.innerWidth;
+                const y = e.clientY / window.innerHeight;
+                const action = getTapAction(x, y, settings.tapMode, settings.handPreference, settings.invertPageTurn);
+                console.log(`[overlay-tap] x=${x.toFixed(3)} y=${y.toFixed(3)} → ${action}`);
+                switch (action) {
+                  case 'prev': goPrev(); break;
+                  case 'next': goNext(); break;
+                  case 'toggle': handleToggleBar(); break;
                 }
               }}
             />
