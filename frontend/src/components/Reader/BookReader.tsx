@@ -490,7 +490,7 @@ export default function BookReader() {
                   ...ReactReaderStyle.reader,
                   top: 0,
                   left: 0,
-                  bottom: 0,
+                  bottom: 16,
                   right: 0,
                 },
                 titleArea: { ...ReactReaderStyle.titleArea, display: 'none' },
@@ -566,7 +566,19 @@ export default function BookReader() {
                 }
               }}
             />
-            {/* Touch overlay removed - use outer Box for tap/swipe instead */}
+            {/* Transparent touch overlay — captures all taps/swipes above iframe */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                zIndex: 3,
+                touchAction: 'pan-x',
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+              }}
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
+            />
           </Box>
         );
     }
@@ -574,13 +586,14 @@ export default function BookReader() {
 
   return (
     <Box sx={{
-      height: '100vh',
+      height: '100dvh',
       display: 'flex',
       flexDirection: 'column',
       bgcolor: theme.bg,
       userSelect: 'none',
       WebkitUserSelect: 'none',
       touchAction: 'manipulation',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     }}>
       {/* Top Bar */}
       <AppBar
