@@ -38,7 +38,6 @@ interface EpubRendition {
   flow: (value: string) => void;
   currentLocation: () => unknown;
   on: (event: string, callback: (...args: unknown[]) => void) => void;
-  getContents: () => Array<{ window: Window; document: Document }>;
   hooks: {
     content: {
       register: (fn: (contents: { document: Document; window: Window }) => void) => void;
@@ -61,20 +60,17 @@ function TapZoneOverlay({ tapMode, handPreference, invert }: {
 }) {
   const zones = getTapZones(tapMode, handPreference, invert);
 
-  // Each zone renders a tiny arrow icon hugging the edge
   return (
     <>
       {zones.map((zone, i) => {
-        // Arrow character and position
         const isSameSide = tapMode === 'same-side';
         let arrow: string;
         if (isSameSide) {
-          arrow = zone.vertical === 'top' ? '\u25B2' : '\u25BC'; // ▲ ▼
+          arrow = zone.vertical === 'top' ? '\u25B2' : '\u25BC';
         } else {
-          arrow = zone.side === 'left' ? '\u25C0' : '\u25B6'; // ◀ ▶
+          arrow = zone.side === 'left' ? '\u25C0' : '\u25B6';
         }
 
-        // Position the small indicator at the edge
         const sx: Record<string, unknown> = {
           position: 'absolute',
           pointerEvents: 'none',
@@ -92,11 +88,9 @@ function TapZoneOverlay({ tapMode, handPreference, invert }: {
         };
 
         if (isSameSide) {
-          // Same-side: arrows on the edge of the nav side
           if (zone.side === 'left') { sx.left = 4; } else { sx.right = 4; }
           if (zone.vertical === 'top') { sx.top = '20%'; } else { sx.bottom = '20%'; }
         } else {
-          // Two-side: arrows centered vertically on each edge
           sx.top = '50%';
           sx.transform = 'translateY(-50%)';
           if (zone.side === 'left') { sx.left = 4; } else { sx.right = 4; }
@@ -162,6 +156,36 @@ function TocDrawer({ open, onClose, toc, onSelect }: {
   );
 }
 
+/* ── Helper: build epub theme styles ──────────────────────── */
+function buildEpubStyles(
+  theme: { bg: string; fg: string },
+  fontSize: number,
+  lineHeight: number,
+  writingMode: 'horizontal' | 'vertical',
+): Record<string, Record<string, string>> {
+  const wm = writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb';
+  return {
+    'html': {
+      'writing-mode': `${wm} !important`,
+      '-webkit-writing-mode': `${wm} !important`,
+    },
+    'body': {
+      'background-color': `${theme.bg} !important`,
+      'color': `${theme.fg} !important`,
+      'font-size': `${fontSize}px !important`,
+      'line-height': `${lineHeight} !important`,
+      'writing-mode': `${wm} !important`,
+      '-webkit-writing-mode': `${wm} !important`,
+      '-webkit-user-select': 'none !important',
+      'user-select': 'none !important',
+    },
+    'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
+      'font-size': `${fontSize}px !important`,
+      'line-height': `${lineHeight} !important`,
+    },
+  };
+}
+
 /* ── Main BookReader ────────────────────────────────────── */
 export default function BookReader() {
   const { bookId } = useParams<{ bookId: string }>();
@@ -184,20 +208,15 @@ export default function BookReader() {
   const percentageRef = useRef(0);
   const renditionRef = useRef<EpubRendition | null>(null);
 
-  // Refs for stable closure in keyboard/iframe callbacks
   const goPrevRef = useRef<() => void>(() => {});
   const goNextRef = useRef<() => void>(() => {});
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
-  // Debounce guard: prevent double-fire from iframe + outer Box handling same tap
+  // Debounce guard: prevent double-fire from overlay + outer Box
   const navLock = useRef(false);
 
-  // Track last chapter navigation direction for horizontal mode:
-  // when going "prev" to previous chapter, we need to scroll to the last page
-  const lastChapterNavDir = useRef<'next' | 'prev' | null>(null);
-
-  // Pointer tracking for tap/swipe detection (works on both desktop and mobile)
+  // Pointer tracking for tap/swipe detection
   const pointerDownPos = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const { save } = useProgressSync(currentUser?.id || '', bookId || '');
@@ -246,162 +265,39 @@ export default function BookReader() {
     loadData();
   }, [bookId, currentUser, navigate]);
 
-  // Auto-hide top bar after 3s when shown
+  // Auto-hide top bar after 4s
   useEffect(() => {
     if (!showBar) return;
     const timer = setTimeout(() => setShowBar(false), 4000);
     return () => clearTimeout(timer);
   }, [showBar]);
 
-  // Apply EPUB settings when they change
+  // Apply EPUB theme styles when settings change (NO manual CSS columns)
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
 
-    const writingModeValue = settings.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb';
+    const styles = buildEpubStyles(theme, settings.fontSize, settings.lineHeight, settings.writingMode);
+    rendition.themes.default(styles);
 
-    const isHoriz = settings.writingMode === 'horizontal';
-    const epubStyles: Record<string, Record<string, string>> = {
-      body: {
-        'background-color': `${theme.bg} !important`,
-        color: `${theme.fg} !important`,
-        'font-size': `${settings.fontSize}px !important`,
-        'line-height': `${settings.lineHeight} !important`,
-        'writing-mode': `${writingModeValue} !important`,
-        '-webkit-writing-mode': `${writingModeValue} !important`,
-        '-webkit-user-select': 'none !important',
-        'user-select': 'none !important',
-        ...(isHoriz ? {
-          'text-align': 'left !important',
-          'direction': 'ltr !important',
-        } : {}),
-      },
-      'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
-        'font-size': `${settings.fontSize}px !important`,
-        'line-height': `${settings.lineHeight} !important`,
-        'writing-mode': `${writingModeValue} !important`,
-        '-webkit-writing-mode': `${writingModeValue} !important`,
-        ...(isHoriz ? {
-          'text-align': 'left !important',
-        } : {}),
-      },
-      'html': {
-        'writing-mode': `${writingModeValue} !important`,
-        '-webkit-writing-mode': `${writingModeValue} !important`,
-      },
-    };
-
-    rendition.themes.default(epubStyles);
-
-    // Directly apply writing-mode and column layout to the current iframe
-    const iframeEl = document.querySelector('iframe');
-    if (iframeEl?.contentDocument) {
-      const doc = iframeEl.contentDocument;
-      const html = doc.documentElement;
-      const body = doc.body;
-      html.style.setProperty('writing-mode', writingModeValue, 'important');
-      html.style.setProperty('-webkit-writing-mode', writingModeValue, 'important');
-      html.style.setProperty('overflow', 'hidden', 'important');
-      body.style.setProperty('writing-mode', writingModeValue, 'important');
-      body.style.setProperty('-webkit-writing-mode', writingModeValue, 'important');
-      body.style.setProperty('overflow', 'hidden', 'important');
-
-      if (writingModeValue === 'horizontal-tb') {
-        // Set up CSS columns for horizontal pagination (manual scrolling)
-        const pageW = iframeEl.clientWidth;
-        const pageH = iframeEl.clientHeight || window.innerHeight;
-        body.style.setProperty('column-width', `${pageW}px`, 'important');
-        body.style.setProperty('-webkit-column-width', `${pageW}px`, 'important');
-        body.style.setProperty('column-gap', '0px', 'important');
-        body.style.setProperty('column-fill', 'auto', 'important');
-        body.style.setProperty('overflow', 'hidden', 'important');
-        body.style.setProperty('height', `${pageH}px`, 'important');
-        body.style.setProperty('padding', '20px', 'important');
-        body.style.setProperty('box-sizing', 'border-box', 'important');
-        body.style.setProperty('text-align', 'left', 'important');
-        body.style.setProperty('direction', 'ltr', 'important');
-        // Reset scroll to beginning of chapter
-        const scrollEl = doc.scrollingElement || doc.documentElement;
-        scrollEl.scrollLeft = 0;
+    // Force epub.js to re-render with new styles by redisplaying current location
+    try {
+      const loc = rendition.currentLocation() as { start?: { cfi?: string } } | null;
+      const cfi = loc?.start?.cfi;
+      if (cfi) {
+        rendition.display(cfi);
       }
-    }
-
-    // For vertical mode, let epub.js handle everything via re-render
-    if (writingModeValue === 'vertical-rl') {
-      try {
-        const loc = rendition.currentLocation() as { start?: { cfi?: string } } | null;
-        const cfi = loc?.start?.cfi;
-        const manager = (rendition as unknown as { manager?: { clear?: () => void } }).manager;
-        if (manager?.clear) manager.clear();
-        rendition.flow('paginated');
-        if (cfi) rendition.display(cfi);
-      } catch { /* ignore */ }
-    }
+    } catch { /* ignore on first render */ }
   }, [settings.fontSize, settings.lineHeight, settings.themeMode, settings.writingMode, theme]);
 
   const handleToggleBar = useCallback(() => {
     setShowBar(prev => !prev);
   }, []);
 
-  // Manual CSS column scrolling for horizontal mode on vertical-rl EPUBs.
-  // epub.js's rendition.next()/prev() breaks when writing-mode is overridden,
-  // so we scroll the columns ourselves and only call next()/prev() at chapter boundaries.
-  const scrollEpubPage = useCallback((direction: 'next' | 'prev') => {
-    const rendition = renditionRef.current;
-    if (!rendition) return;
-
-    const isHorizontalOverride = settingsRef.current.writingMode === 'horizontal';
-
-    if (!isHorizontalOverride) {
-      // Native vertical-rl mode — epub.js handles pagination correctly
-      if (direction === 'next') rendition.next();
-      else rendition.prev();
-      return;
-    }
-
-    // Horizontal override mode — manually scroll CSS columns in iframe
-    const iframeEl = document.querySelector('iframe') as HTMLIFrameElement;
-    if (!iframeEl?.contentDocument) {
-      if (direction === 'next') rendition.next();
-      else rendition.prev();
-      return;
-    }
-
-    const doc = iframeEl.contentDocument;
-    const scrollEl = doc.scrollingElement || doc.documentElement;
-
-    // In horizontal-tb column pagination, content overflows horizontally
-    const pageWidth = iframeEl.clientWidth;
-    const currentScroll = scrollEl.scrollLeft;
-    const maxScroll = scrollEl.scrollWidth - pageWidth;
-
-    console.log(`[scrollEpubPage] dir=${direction} scrollLeft=${currentScroll} maxScroll=${maxScroll} scrollWidth=${scrollEl.scrollWidth} pageWidth=${pageWidth}`);
-
-    if (direction === 'next') {
-      if (currentScroll >= maxScroll - 5) {
-        // At the end of this chapter — go to next spine item
-        lastChapterNavDir.current = 'next';
-        rendition.next();
-      } else {
-        // Scroll to next column/page
-        scrollEl.scrollLeft = Math.min(currentScroll + pageWidth, maxScroll);
-      }
-    } else {
-      if (currentScroll <= 5) {
-        // At the beginning of this chapter — go to previous spine item
-        lastChapterNavDir.current = 'prev';
-        rendition.prev();
-      } else {
-        // Scroll to previous column/page
-        scrollEl.scrollLeft = Math.max(currentScroll - pageWidth, 0);
-      }
-    }
-  }, []);
-
-  // Unified prev/next for keyboard & side buttons
+  // Simple prev/next — fully delegate to epub.js pagination
   const goPrev = useCallback(() => {
     if (book?.format === 'epub') {
-      scrollEpubPage('prev');
+      renditionRef.current?.prev();
     } else if (book?.format === 'txt') {
       const el = document.querySelector('[data-txt-container]') as HTMLElement;
       if (!el) return;
@@ -412,11 +308,11 @@ export default function BookReader() {
         el.scrollBy({ top: -el.clientHeight * 0.85, behavior: 'smooth' });
       }
     }
-  }, [book?.format, settings.writingMode, scrollEpubPage]);
+  }, [book?.format, settings.writingMode]);
 
   const goNext = useCallback(() => {
     if (book?.format === 'epub') {
-      scrollEpubPage('next');
+      renditionRef.current?.next();
     } else if (book?.format === 'txt') {
       const el = document.querySelector('[data-txt-container]') as HTMLElement;
       if (!el) return;
@@ -427,34 +323,34 @@ export default function BookReader() {
         el.scrollBy({ top: el.clientHeight * 0.85, behavior: 'smooth' });
       }
     }
-  }, [book?.format, settings.writingMode, scrollEpubPage]);
+  }, [book?.format, settings.writingMode]);
 
-  // Keep refs in sync for keyboard callbacks
+  // Keep refs in sync for keyboard/iframe callbacks
   useEffect(() => { goPrevRef.current = goPrev; }, [goPrev]);
   useEffect(() => { goNextRef.current = goNext; }, [goNext]);
 
-  // Keyboard: Arrow keys, PageUp/Down, Space, Volume keys, Boox buttons
+  // Keyboard: Arrow keys, PageUp/Down, Space, Volume keys
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (settingsOpen || tocOpen) return;
 
       switch (e.key) {
         case 'ArrowLeft':
+        case 'ArrowUp':
         case 'PageUp':
           e.preventDefault();
-          console.log(`[keyboard] ${e.key} → prev (type=${e.type})`);
           goPrev();
           return;
         case 'ArrowRight':
+        case 'ArrowDown':
         case 'PageDown':
         case ' ':
           e.preventDefault();
-          console.log(`[keyboard] ${e.key} → next (type=${e.type})`);
           goNext();
           return;
       }
 
-      // Volume keys (Android/Boox)
+      // Volume keys (Android/Boox) — keyCode 24=VolumeUp, 25=VolumeDown
       if (settings.volumeKeyNav) {
         if (e.keyCode === 24) {
           e.preventDefault();
@@ -493,6 +389,42 @@ export default function BookReader() {
     percentageRef.current = pct;
     save(null, pct);
   }, [save]);
+
+  // --- Tap/swipe handler (shared by overlay and outer box) ---
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    pointerDownPos.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+  }, []);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (!pointerDownPos.current || settingsOpen || tocOpen) return;
+    const dx = e.clientX - pointerDownPos.current.x;
+    const dy = e.clientY - pointerDownPos.current.y;
+    const dt = Date.now() - pointerDownPos.current.t;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    pointerDownPos.current = null;
+
+    // Swipe detection
+    if (dist > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 500) {
+      if (dx > 0) goPrev(); else goNext();
+      return;
+    }
+
+    // Tap detection
+    if (dist > 15) return;
+    if (navLock.current) return;
+    navLock.current = true;
+    setTimeout(() => { navLock.current = false; }, 300);
+
+    const x = e.clientX / window.innerWidth;
+    const y = e.clientY / window.innerHeight;
+    const s = settingsRef.current;
+    const action = getTapAction(x, y, s.tapMode, s.handPreference, s.invertPageTurn);
+    switch (action) {
+      case 'prev': goPrev(); break;
+      case 'next': goNext(); break;
+      case 'toggle': handleToggleBar(); break;
+    }
+  }, [goPrev, goNext, settingsOpen, tocOpen, handleToggleBar]);
 
   if (loading) {
     return (
@@ -535,10 +467,11 @@ export default function BookReader() {
           <Box sx={{
             flex: 1, height: '100%', position: 'relative',
             overflow: 'hidden',
-            // Kill react-reader's SwipeWrapper mouse/touch handlers
+            // Disable react-reader's SwipeWrapper and iframe pointer events
+            // so our overlay handles all interaction
             '& div[style*="height: 100%"]': { pointerEvents: 'none' },
-            '& iframe': { pointerEvents: 'none' }, // iframe doesn't need events — overlay handles them
-            // Hide scrollbars everywhere (iOS Safari)
+            '& iframe': { pointerEvents: 'none' },
+            // Hide scrollbars
             '& *': { scrollbarWidth: 'none', msOverflowStyle: 'none' },
             '& *::-webkit-scrollbar': { display: 'none' },
           }}>
@@ -548,7 +481,6 @@ export default function BookReader() {
               locationChanged={handleEpubLocationChanged}
               showToc={false}
               tocChanged={(newToc) => setToc(newToc)}
-              // Disable react-reader's built-in keyboard nav (we handle it ourselves)
               handleKeyPress={() => {}}
               epubOptions={{
                 flow: 'paginated',
@@ -567,64 +499,27 @@ export default function BookReader() {
                   bottom: 0,
                   right: 0,
                 },
-                titleArea: {
-                  ...ReactReaderStyle.titleArea,
-                  display: 'none',
-                },
+                titleArea: { ...ReactReaderStyle.titleArea, display: 'none' },
                 prev: { ...ReactReaderStyle.prev, display: 'none', visibility: 'hidden' as const, width: 0, height: 0, overflow: 'hidden' },
                 next: { ...ReactReaderStyle.next, display: 'none', visibility: 'hidden' as const, width: 0, height: 0, overflow: 'hidden' },
                 arrow: { ...ReactReaderStyle.arrow, display: 'none' },
               }}
               getRendition={(rendition) => {
                 renditionRef.current = rendition as unknown as EpubRendition;
+                const r = rendition as unknown as EpubRendition;
 
-                rendition.on('started', () => {
-                  (rendition as unknown as EpubRendition).flow('paginated');
-                });
-
-                const initWm = settings.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb';
-                const initialStyles: Record<string, Record<string, string>> = {
-                  body: {
-                    'background-color': `${theme.bg} !important`,
-                    color: `${theme.fg} !important`,
-                    'font-size': `${settings.fontSize}px !important`,
-                    'line-height': `${settings.lineHeight} !important`,
-                    'writing-mode': `${initWm} !important`,
-                    '-webkit-writing-mode': `${initWm} !important`,
-                    '-webkit-user-select': 'none !important',
-                    'user-select': 'none !important',
-                  },
-                  'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
-                    'font-size': `${settings.fontSize}px !important`,
-                    'line-height': `${settings.lineHeight} !important`,
-                    'writing-mode': `${initWm} !important`,
-                    '-webkit-writing-mode': `${initWm} !important`,
-                  },
-                  'html': {
-                    'writing-mode': `${initWm} !important`,
-                    '-webkit-writing-mode': `${initWm} !important`,
-                  },
-                };
-
+                // Apply initial styles — only theme, NO manual column overrides
+                const initialStyles = buildEpubStyles(
+                  theme, settings.fontSize, settings.lineHeight, settings.writingMode,
+                );
                 rendition.themes.default(initialStyles);
 
-                // Ensure writing-mode and column layout is correct for each chapter
-                rendition.hooks.content.register((contents: { document: Document; window: Window }) => {
-                  const isHoriz = settingsRef.current.writingMode === 'horizontal';
-                  const wm = isHoriz ? 'horizontal-tb' : 'vertical-rl';
-                  const html = contents.document.documentElement;
-                  const body = contents.document.body;
-                  html.style.setProperty('writing-mode', wm, 'important');
-                  html.style.setProperty('-webkit-writing-mode', wm, 'important');
-                  body.style.setProperty('writing-mode', wm, 'important');
-                  body.style.setProperty('-webkit-writing-mode', wm, 'important');
-
-                  // Hide scrollbars (critical for iOS Safari)
-                  const hideScrollbarCSS = contents.document.createElement('style');
-                  hideScrollbarCSS.textContent = `
+                // Hide scrollbars and disable text selection inside epub iframe
+                rendition.hooks.content.register((contents: { document: Document }) => {
+                  const style = contents.document.createElement('style');
+                  style.textContent = `
                     html, body {
                       overflow: hidden !important;
-                      -webkit-overflow-scrolling: auto !important;
                       scrollbar-width: none !important;
                       -ms-overflow-style: none !important;
                     }
@@ -635,51 +530,17 @@ export default function BookReader() {
                     }
                     * {
                       -webkit-touch-callout: none !important;
+                      -webkit-user-select: none !important;
+                      user-select: none !important;
                     }
                   `;
-                  contents.document.head.appendChild(hideScrollbarCSS);
-
-                  // For horizontal override: set up CSS columns manually so content
-                  // paginates correctly (epub.js's column setup breaks with overridden writing-mode)
-                  if (isHoriz) {
-                    const iframeEl = document.querySelector('iframe');
-                    const pageW = iframeEl?.clientWidth || contents.window.innerWidth;
-                    const pageH = iframeEl?.clientHeight || contents.window.innerHeight;
-                    body.style.setProperty('column-width', `${pageW}px`, 'important');
-                    body.style.setProperty('-webkit-column-width', `${pageW}px`, 'important');
-                    body.style.setProperty('column-gap', '0px', 'important');
-                    body.style.setProperty('column-fill', 'auto', 'important');
-                    body.style.setProperty('overflow', 'hidden', 'important');
-                    body.style.setProperty('height', `${pageH}px`, 'important');
-                    body.style.setProperty('padding', '20px', 'important');
-                    body.style.setProperty('box-sizing', 'border-box', 'important');
-                    body.style.setProperty('text-align', 'left', 'important');
-                    body.style.setProperty('direction', 'ltr', 'important');
-
-                    // When navigating backward to a previous chapter, scroll to the last page
-                    // so the user continues reading from where they left off
-                    if (lastChapterNavDir.current === 'prev') {
-                      requestAnimationFrame(() => {
-                        const scrollEl = contents.document.scrollingElement || contents.document.documentElement;
-                        const maxScroll = scrollEl.scrollWidth - pageW;
-                        if (maxScroll > 0) {
-                          // Snap to the last column boundary
-                          scrollEl.scrollLeft = Math.floor(maxScroll / pageW) * pageW;
-                        }
-                        lastChapterNavDir.current = null;
-                      });
-                    } else {
-                      lastChapterNavDir.current = null;
-                    }
-                  }
+                  contents.document.head.appendChild(style);
                 });
 
                 // Generate location map for page numbers
-                const r = rendition as unknown as EpubRendition;
                 r.book.locations.generate(1024).then(() => {
                   setTotalPages(r.book.locations.total);
-                  console.log(`[epub] locations generated: ${r.book.locations.total} pages`);
-                }).catch(() => { /* ignore */ });
+                }).catch(() => {});
 
                 rendition.on('relocated', (loc: { start: { percentage: number; cfi: string } }) => {
                   const pct = Math.round(loc.start.percentage * 10000) / 100;
@@ -687,35 +548,10 @@ export default function BookReader() {
                   percentageRef.current = pct;
                   save(locationRef.current, pct);
 
-                  // Update page number
                   try {
                     const page = r.book.locations.locationFromCfi(loc.start.cfi);
-                    if (page >= 0) setCurrentPage(page + 1); // 1-based
-                  } catch { /* locations not ready yet */ }
-                });
-
-                // Handle taps inside EPUB iframe
-                rendition.on('click', (e: MouseEvent) => {
-                  if (navLock.current) return;
-                  navLock.current = true;
-                  setTimeout(() => { navLock.current = false; }, 300);
-
-                  // In vertical-rl paginated mode, iframe height is the full content height
-                  // (e.g. 14008px for 17 pages). Use viewport height for normalization.
-                  const iframeEl = document.querySelector('iframe');
-                  const w = iframeEl?.clientWidth || window.innerWidth;
-                  const viewH = window.innerHeight;
-                  const x = (((e.clientX % w) + w) % w) / w;
-                  const y = (((e.clientY % viewH) + viewH) % viewH) / viewH;
-
-                  const s = settingsRef.current;
-                  const action = getTapAction(x, y, s.tapMode, s.handPreference, s.invertPageTurn);
-                  console.log(`[iframe-click] clientY=${e.clientY} viewH=${viewH} x=${x.toFixed(3)} y=${y.toFixed(3)} → ${action}`);
-                  switch (action) {
-                    case 'prev': goPrevRef.current(); break;
-                    case 'next': goNextRef.current(); break;
-                    case 'toggle': handleToggleBar(); break;
-                  }
+                    if (page >= 0) setCurrentPage(page + 1);
+                  } catch { /* locations not ready */ }
                 });
 
                 // Simplified → Traditional Chinese conversion
@@ -737,50 +573,18 @@ export default function BookReader() {
                 }
               }}
             />
-            {/* Transparent touch overlay — captures all taps/swipes on iOS
-                where iframe click events are unreliable */}
+            {/* Transparent touch overlay — captures all taps/swipes */}
             <Box
               sx={{
                 position: 'absolute',
                 top: 0, left: 0, right: 0, bottom: 0,
                 zIndex: 3,
-                touchAction: 'pan-x', // allow horizontal swipe detection
+                touchAction: 'pan-x',
                 WebkitTouchCallout: 'none',
                 WebkitUserSelect: 'none',
               }}
-              onPointerDown={(e) => {
-                pointerDownPos.current = { x: e.clientX, y: e.clientY, t: Date.now() };
-              }}
-              onPointerUp={(e) => {
-                if (!pointerDownPos.current || settingsOpen || tocOpen) return;
-                const dx = e.clientX - pointerDownPos.current.x;
-                const dy = e.clientY - pointerDownPos.current.y;
-                const dt = Date.now() - pointerDownPos.current.t;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                pointerDownPos.current = null;
-
-                // Swipe detection
-                if (dist > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 500) {
-                  if (dx > 0) goPrev(); else goNext();
-                  return;
-                }
-
-                // Tap detection
-                if (dist > 15) return;
-                if (navLock.current) return;
-                navLock.current = true;
-                setTimeout(() => { navLock.current = false; }, 300);
-
-                const x = e.clientX / window.innerWidth;
-                const y = e.clientY / window.innerHeight;
-                const action = getTapAction(x, y, settings.tapMode, settings.handPreference, settings.invertPageTurn);
-                console.log(`[overlay-tap] x=${x.toFixed(3)} y=${y.toFixed(3)} → ${action}`);
-                switch (action) {
-                  case 'prev': goPrev(); break;
-                  case 'next': goNext(); break;
-                  case 'toggle': handleToggleBar(); break;
-                }
-              }}
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
             />
           </Box>
         );
@@ -795,7 +599,7 @@ export default function BookReader() {
       bgcolor: theme.bg,
       userSelect: 'none',
       WebkitUserSelect: 'none',
-      touchAction: 'manipulation', // disable double-tap zoom
+      touchAction: 'manipulation',
     }}>
       {/* Top Bar */}
       <AppBar
@@ -834,53 +638,11 @@ export default function BookReader() {
       {/* Reader */}
       <Box
         sx={{ flex: 1, position: 'relative' }}
-        onPointerDown={(e) => {
-          console.log(`[outer-pointerDown] x=${e.clientX} y=${e.clientY} target=${(e.target as HTMLElement).tagName}`);
-          pointerDownPos.current = { x: e.clientX, y: e.clientY, t: Date.now() };
-        }}
-        onPointerUp={(e) => {
-          if (!pointerDownPos.current || settingsOpen || tocOpen) return;
-          const dx = e.clientX - pointerDownPos.current.x;
-          const dy = e.clientY - pointerDownPos.current.y;
-          const dt = Date.now() - pointerDownPos.current.t;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          pointerDownPos.current = null;
-
-          // Swipe detection
-          if (dist > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 500) {
-            console.log(`[outer-swipe] dx=${dx.toFixed(0)} → ${dx > 0 ? 'prev' : 'next'}`);
-            if (dx > 0) { goPrev(); } else { goNext(); }
-            return;
-          }
-
-          // Only handle as tap if pointer didn't move much
-          if (dist > 15) {
-            console.log(`[outer-pointerUp] IGNORED dist=${dist.toFixed(1)}`);
-            return;
-          }
-
-          // Skip if iframe already handled this tap
-          if (navLock.current) {
-            console.log('[outer-tap] BLOCKED by navLock');
-            return;
-          }
-          navLock.current = true;
-          setTimeout(() => { navLock.current = false; }, 300);
-
-          const x = e.clientX / window.innerWidth;
-          const y = e.clientY / window.innerHeight;
-          const action = getTapAction(x, y, settings.tapMode, settings.handPreference, settings.invertPageTurn);
-          console.log(`[outer-tap] x=${x.toFixed(3)} y=${y.toFixed(3)} mode=${settings.tapMode} hand=${settings.handPreference} invert=${settings.invertPageTurn} → ${action}`);
-          switch (action) {
-            case 'prev': goPrev(); break;
-            case 'next': goNext(); break;
-            case 'toggle': handleToggleBar(); break;
-          }
-        }}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
       >
         {renderReader()}
 
-        {/* Glass tap zone overlay */}
         {settings.showTapZones && (
           <TapZoneOverlay
             tapMode={settings.tapMode}
