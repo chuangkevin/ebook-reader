@@ -46,6 +46,14 @@ export const toggleBookmark = createAsyncThunk(
   }
 );
 
+export const clearProgress = createAsyncThunk(
+  'books/clearProgress',
+  async ({ userId, bookId }: { userId: string; bookId: string }) => {
+    await apiService.deleteProgress(userId, bookId);
+    return bookId;
+  }
+);
+
 export const deleteBook = createAsyncThunk('books/deleteBook', async (id: string) => {
   await apiService.deleteBook(id);
   return id;
@@ -92,6 +100,9 @@ const bookSlice = createSlice({
         } else {
           state.bookmarks = state.bookmarks.filter(id => id !== bookId);
         }
+      })
+      .addCase(clearProgress.fulfilled, (state, action) => {
+        state.userProgress = state.userProgress.filter(p => p.bookId !== action.payload);
       })
       .addCase(deleteBook.fulfilled, (state, action) => {
         state.books = state.books.filter(b => b.id !== action.payload);

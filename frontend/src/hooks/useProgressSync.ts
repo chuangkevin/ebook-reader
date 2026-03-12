@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import apiService from '../services/api.service';
+import { queueProgressUpdate, flushQueue } from '../utils/offlineSync';
 
 export function useProgressSync(userId: string, bookId: string) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,8 +65,9 @@ export function useProgressSync(userId: string, bookId: string) {
         .then(() => {
           lastSavedRef.current = pending;
         })
-        .catch(err => {
-          console.error('Failed to save progress:', err);
+        .catch(() => {
+          // Offline — queue for later sync
+          queueProgressUpdate(userId, bookId, pending.cfi, pending.percentage);
         });
     }, 3000);
   }, [userId, bookId]);
@@ -83,12 +85,24 @@ export function useProgressSync(userId: string, bookId: string) {
       }
     };
 
+    // When back online, flush queued progress updates
+    const handleOnline = () => {
+      flushQueue(async (item) => {
+        await apiService.updateProgress(item.userId, item.bookId, item.cfi, item.percentage);
+      });
+    };
+
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
+    // Try flushing on mount in case we came back online
+    if (navigator.onLine) handleOnline();
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
 
       // 組件卸載時也立即儲存
       flushSync();

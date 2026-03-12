@@ -28,8 +28,9 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import LogoutIcon from '@mui/icons-material/Logout';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import CloseIcon from '@mui/icons-material/Close';
 import type { AppDispatch, RootState } from '../../store';
-import { fetchBooks, fetchUserProgress, fetchBookmarks, toggleBookmark, deleteBook, addBook, setUploadProgress } from '../../store/bookSlice';
+import { fetchBooks, fetchUserProgress, fetchBookmarks, toggleBookmark, deleteBook, clearProgress, addBook, setUploadProgress } from '../../store/bookSlice';
 import { selectUser } from '../../store/userSlice';
 import apiService from '../../services/api.service';
 import type { Book } from '../../types';
@@ -131,6 +132,12 @@ export default function BookLibrary() {
     setDeleteDialogOpen(false);
   };
 
+  const handleClearProgress = (bookId: string) => {
+    if (!currentUser) return;
+    dispatch(clearProgress({ userId: currentUser.id, bookId }));
+    setSnackbar({ open: true, message: '已移除閱讀進度', severity: 'success' });
+  };
+
   const handleToggleBookmark = (bookId: string) => {
     if (!currentUser) return;
     dispatch(toggleBookmark({ userId: currentUser.id, bookId }));
@@ -179,7 +186,7 @@ export default function BookLibrary() {
   }
 
   // 書籍卡片（共用）
-  const renderBookCard = (book: Book, options?: { showProgress?: number }) => (
+  const renderBookCard = (book: Book, options?: { showProgress?: number; showClearProgress?: boolean }) => (
     <Card
       sx={{
         height: '100%',
@@ -217,6 +224,17 @@ export default function BookLibrary() {
 
       {/* 操作按鈕 */}
       <Box sx={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 0.5 }}>
+        {options?.showClearProgress && (
+          <Tooltip title="不看了">
+            <IconButton
+              size="small"
+              onClick={(e) => { e.stopPropagation(); handleClearProgress(book.id); }}
+              sx={{ bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title={bookmarkSet.has(book.id) ? '取消稍後閱讀' : '稍後閱讀'}>
           <IconButton
             size="small"
@@ -277,7 +295,7 @@ export default function BookLibrary() {
           <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 1, '::-webkit-scrollbar': { height: 6 }, '::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.2)', borderRadius: 3 } }}>
             {continueReading.map(({ book, percentage }) => (
               <Box key={book.id} sx={{ minWidth: 180, maxWidth: 180, flexShrink: 0 }}>
-                {renderBookCard(book, { showProgress: percentage })}
+                {renderBookCard(book, { showProgress: percentage, showClearProgress: true })}
               </Box>
             ))}
           </Box>

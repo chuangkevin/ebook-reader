@@ -47,6 +47,14 @@ class ProgressService {
     return { id, userId, bookId, cfi, percentage, lastReadAt: now };
   }
 
+  delete(userId: string, bookId: string): boolean {
+    const result = db.prepare(
+      'DELETE FROM reading_progress WHERE user_id = ? AND book_id = ?'
+    ).run(userId, bookId);
+    logger.debug(`Progress deleted: user=${userId}, book=${bookId}`);
+    return result.changes > 0;
+  }
+
   getAllForUser(userId: string): Array<ReadingProgress & { title: string; author: string; coverPath: string | null }> {
     const rows = db.prepare(`
       SELECT rp.*, b.title, b.author, b.cover_path

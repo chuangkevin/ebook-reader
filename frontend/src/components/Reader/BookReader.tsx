@@ -11,8 +11,6 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SettingsIcon from '@mui/icons-material/Settings';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { ReactReader, ReactReaderStyle } from 'react-reader';
 import type { RootState } from '../../store';
 import apiService from '../../services/api.service';
@@ -52,7 +50,7 @@ export default function BookReader() {
   const [location, setLocation] = useState<string | null>(null);
   const [percentage, setPercentage] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [showBar, setShowBar] = useState(true);
+  const [showBar, setShowBar] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const locationRef = useRef<string | null>(null);
@@ -63,8 +61,8 @@ export default function BookReader() {
   const goPrevRef = useRef<() => void>(() => {});
   const goNextRef = useRef<() => void>(() => {});
 
-  // Pointer tracking for tap detection (works on both desktop and mobile)
-  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
+  // Pointer tracking for tap/swipe detection (works on both desktop and mobile)
+  const pointerDownPos = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const { save } = useProgressSync(currentUser?.id || '', bookId || '');
 
@@ -112,10 +110,10 @@ export default function BookReader() {
     loadData();
   }, [bookId, currentUser, navigate]);
 
-  // Auto-hide top bar
+  // Auto-hide top bar after 3s when shown
   useEffect(() => {
     if (!showBar) return;
-    const timer = setTimeout(() => setShowBar(false), 3000);
+    const timer = setTimeout(() => setShowBar(false), 4000);
     return () => clearTimeout(timer);
   }, [showBar]);
 
@@ -262,17 +260,19 @@ export default function BookReader() {
       }
 
       // Volume keys (Android/Boox) — use keyCode since key name varies
-      if (e.keyCode === 24) { // Volume Up → prev page
-        e.preventDefault();
-        goPrev();
-      } else if (e.keyCode === 25) { // Volume Down → next page
-        e.preventDefault();
-        goNext();
+      if (settings.volumeKeyNav) {
+        if (e.keyCode === 24) { // Volume Up → prev page
+          e.preventDefault();
+          goPrev();
+        } else if (e.keyCode === 25) { // Volume Down → next page
+          e.preventDefault();
+          goNext();
+        }
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [goPrev, goNext, settingsOpen]);
+  }, [goPrev, goNext, settingsOpen, settings.volumeKeyNav]);
 
   // --- EPUB handlers ---
   const handleEpubLocationChanged = useCallback((newCfi: string) => {
@@ -389,6 +389,17 @@ export default function BookReader() {
                   save(locationRef.current, pct);
                 });
 
+                // Handle taps inside EPUB iframe for nav + toolbar toggle
+                rendition.on('click', (e: MouseEvent) => {
+                  const zone = e.clientX / window.innerWidth;
+                  const action = getTapAction(zone, settings.tapZoneLayout);
+                  switch (action) {
+                    case 'prev': goPrevRef.current(); break;
+                    case 'next': goNextRef.current(); break;
+                    case 'toggle': handleToggleBar(); break;
+                  }
+                });
+
                 // Simplified → Traditional Chinese conversion
                 if (settings.convertToTraditional) {
                   import('opencc-js').then((OpenCC) => {
@@ -454,16 +465,23 @@ export default function BookReader() {
       <Box
         sx={{ flex: 1, position: 'relative' }}
         onPointerDown={(e) => {
-          pointerDownPos.current = { x: e.clientX, y: e.clientY };
+          pointerDownPos.current = { x: e.clientX, y: e.clientY, t: Date.now() };
         }}
         onPointerUp={(e) => {
           if (!pointerDownPos.current || settingsOpen) return;
           const dx = e.clientX - pointerDownPos.current.x;
           const dy = e.clientY - pointerDownPos.current.y;
+          const dt = Date.now() - pointerDownPos.current.t;
           const dist = Math.sqrt(dx * dx + dy * dy);
           pointerDownPos.current = null;
 
-          // Only handle as tap if pointer didn't move much (not a swipe)
+          // Swipe detection: horizontal distance > 50px, mostly horizontal, within 500ms
+          if (dist > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 500) {
+            if (dx > 0) { goPrev(); } else { goNext(); }
+            return;
+          }
+
+          // Only handle as tap if pointer didn't move much
           if (dist > 15) return;
 
           const zone = e.clientX / window.innerWidth;
@@ -477,53 +495,6 @@ export default function BookReader() {
       >
         {renderReader()}
 
-        {/* Desktop side nav buttons for TXT (EPUB has tap zones) */}
-        {book.format === 'txt' && (
-          <>
-            <IconButton
-              onClick={goPrev}
-              sx={{
-                position: 'fixed',
-                left: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                bgcolor: 'rgba(0,0,0,0.3)',
-                color: '#fff',
-                opacity: 0.15,
-                transition: 'opacity 0.3s',
-                '&:hover': { bgcolor: 'rgba(0,0,0,0.6)', opacity: 1 },
-                width: 48,
-                height: 80,
-                borderRadius: 2,
-                display: { xs: 'none', md: 'flex' },
-                zIndex: 10,
-              }}
-            >
-              <ChevronLeftIcon fontSize="large" />
-            </IconButton>
-            <IconButton
-              onClick={goNext}
-              sx={{
-                position: 'fixed',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                bgcolor: 'rgba(0,0,0,0.3)',
-                color: '#fff',
-                opacity: 0.15,
-                transition: 'opacity 0.3s',
-                '&:hover': { bgcolor: 'rgba(0,0,0,0.6)', opacity: 1 },
-                width: 48,
-                height: 80,
-                borderRadius: 2,
-                display: { xs: 'none', md: 'flex' },
-                zIndex: 10,
-              }}
-            >
-              <ChevronRightIcon fontSize="large" />
-            </IconButton>
-          </>
-        )}
       </Box>
 
       {/* Settings Drawer */}

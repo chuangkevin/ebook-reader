@@ -147,6 +147,10 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
         bgcolor: theme.bg,
         userSelect: 'none',
         WebkitUserSelect: 'none',
+        ...(isVertical && {
+          overflowX: 'auto',
+          overflowY: 'hidden',
+        }),
       }}
     >
       <Typography
@@ -159,7 +163,9 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
           wordBreak: 'break-word',
           color: theme.fg,
           writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
-          minHeight: isVertical ? '100%' : 'auto',
+          ...(isVertical
+            ? { height: '100%' }
+            : {}),
         }}
       >
         {content}

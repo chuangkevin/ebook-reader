@@ -73,6 +73,10 @@ class ApiService {
     return data;
   }
 
+  async deleteProgress(userId: string, bookId: string): Promise<void> {
+    await api.delete(`/users/${userId}/books/${bookId}/progress`);
+  }
+
   async updateProgress(userId: string, bookId: string, cfi: string | null, percentage: number): Promise<ReadingProgress> {
     const { data } = await api.put(`/users/${userId}/books/${bookId}/progress`, { cfi, percentage });
     return data;

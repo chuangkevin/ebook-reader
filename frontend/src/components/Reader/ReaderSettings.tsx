@@ -21,6 +21,7 @@ import {
   setWritingMode,
   setConvertToTraditional,
   setTapZoneLayout,
+  setVolumeKeyNav,
   type ThemeMode,
   type WritingMode,
   type TapZoneLayout,
@@ -143,6 +144,18 @@ export default function ReaderSettings({ open, onClose }: ReaderSettingsProps) {
           <ToggleButton value="left-hand">左手</ToggleButton>
           <ToggleButton value="right-hand">右手</ToggleButton>
         </ToggleButtonGroup>
+
+        {/* Volume key navigation */}
+        <FormControlLabel
+          control={
+            <Switch
+              checked={settings.volumeKeyNav}
+              onChange={(e) => dispatch(setVolumeKeyNav(e.target.checked))}
+            />
+          }
+          label="音量鍵翻頁"
+          sx={{ mb: 1 }}
+        />
 
         {/* Simplified to Traditional */}
         <FormControlLabel

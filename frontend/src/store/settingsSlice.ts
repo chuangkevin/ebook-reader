@@ -11,6 +11,7 @@ export interface ReaderSettings {
   writingMode: WritingMode;
   convertToTraditional: boolean;
   tapZoneLayout: TapZoneLayout;
+  volumeKeyNav: boolean;
 }
 
 const STORAGE_KEY = 'ebook-reader-settings';
@@ -22,6 +23,7 @@ const defaultSettings: ReaderSettings = {
   writingMode: 'horizontal',
   convertToTraditional: true,
   tapZoneLayout: 'default',
+  volumeKeyNav: true,
 };
 
 function loadSettings(): ReaderSettings {
@@ -64,8 +66,12 @@ const settingsSlice = createSlice({
       state.tapZoneLayout = action.payload;
       saveSettings(state);
     },
+    setVolumeKeyNav(state, action: PayloadAction<boolean>) {
+      state.volumeKeyNav = action.payload;
+      saveSettings(state);
+    },
   },
 });
 
-export const { setThemeMode, setFontSize, setLineHeight, setWritingMode, setConvertToTraditional, setTapZoneLayout } = settingsSlice.actions;
+export const { setThemeMode, setFontSize, setLineHeight, setWritingMode, setConvertToTraditional, setTapZoneLayout, setVolumeKeyNav } = settingsSlice.actions;
 export default settingsSlice.reducer;

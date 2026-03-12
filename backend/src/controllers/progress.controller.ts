@@ -36,6 +36,17 @@ class ProgressController {
     }
   }
 
+  async delete(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, bookId } = req.params;
+      progressService.delete(userId, bookId);
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Failed to delete progress:', error);
+      res.status(500).json({ error: 'Failed to delete progress' });
+    }
+  }
+
   async getAllForUser(req: Request, res: Response): Promise<void> {
     try {
       const { userId } = req.params;
