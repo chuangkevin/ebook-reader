@@ -358,6 +358,8 @@ export default function BookReader() {
       const mgr = (r as any).manager;
       if (!mgr) { r.prev(); return; }
       const container = mgr.container as HTMLElement;
+      // delta = container width = column content + padding = actual column step
+      // (body has box-sizing:border-box, so column-width is clamped to content area)
       const delta = mgr.layout?.delta || container.offsetWidth;
 
       if (settings.writingMode === 'vertical') {
@@ -660,10 +662,11 @@ export default function BookReader() {
                     }
 
                     const scrollW = body.scrollWidth;
-                    const pageW = view?.layout?.pageWidth || iframe.offsetWidth;
-                    if (pageW <= 0 || scrollW <= pageW) return;
+                    const delta = view?.layout?.delta || iframe.offsetWidth;
+                    if (delta <= 0 || scrollW <= delta) return;
 
-                    const newW = Math.ceil(scrollW / pageW) * pageW;
+                    // Align iframe width to delta so scrolling lands on column boundaries
+                    const newW = Math.ceil(scrollW / delta) * delta;
                     iframe.style.width = newW + 'px';
                     if (element) element.style.width = newW + 'px';
                     // Update epub.js internal tracking
