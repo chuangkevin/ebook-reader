@@ -315,10 +315,10 @@ export default function BookReader() {
     const section = view?.section;
     if (!section) return;
 
-    const spine = r.book?.spine;
-    if (!spine) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const spineItems = (spine as any).items || (spine as any).spineItems || [];
+    const spine = (r as any).book?.spine;
+    if (!spine) return;
+    const spineItems = spine.items || spine.spineItems || [];
     const totalSections = spineItems.length || 1;
     const sectionIndex = section.index ?? 0;
 
