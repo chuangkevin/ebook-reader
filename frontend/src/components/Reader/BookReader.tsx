@@ -164,6 +164,8 @@ function buildEpubStyles(
   writingMode: 'horizontal' | 'vertical',
 ): Record<string, Record<string, string>> {
   const wm = writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb';
+  // In horizontal mode: left-align; in vertical mode: start = top-aligned
+  const textAlign = writingMode === 'vertical' ? 'start' : 'left';
   return {
     'html': {
       'writing-mode': `${wm} !important`,
@@ -176,12 +178,14 @@ function buildEpubStyles(
       'line-height': `${lineHeight} !important`,
       'writing-mode': `${wm} !important`,
       '-webkit-writing-mode': `${wm} !important`,
+      'text-align': `${textAlign} !important`,
       '-webkit-user-select': 'none !important',
       'user-select': 'none !important',
     },
     'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
       'font-size': `${fontSize}px !important`,
       'line-height': `${lineHeight} !important`,
+      'text-align': `${textAlign} !important`,
     },
   };
 }
@@ -294,10 +298,37 @@ export default function BookReader() {
     setShowBar(prev => !prev);
   }, []);
 
-  // Simple prev/next — fully delegate to epub.js pagination
+  // Custom prev/next that scrolls the epub.js container directly.
+  // epub.js's built-in next()/prev() breaks when the container has
+  // direction:rtl (from book metadata) but content is horizontal-tb (LTR).
+  // We use mgr.scrollTo(x,y,true) for silent scrolling (suppresses scroll
+  // events that would trigger reportLocation → setLocation → full re-render).
+  // mgr.scrollBy() is NOT usable because it multiplies x by -1 for RTL.
   const goPrev = useCallback(() => {
     if (book?.format === 'epub') {
-      renditionRef.current?.prev();
+      const r = renditionRef.current;
+      if (!r) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mgr = (r as any).manager;
+      if (!mgr) { r.prev(); return; }
+      const container = mgr.container as HTMLElement;
+      const delta = mgr.layout?.delta || container.offsetWidth;
+
+      if (settings.writingMode === 'vertical') {
+        const top = container.scrollTop;
+        if (top > 0) {
+          mgr.scrollTo(container.scrollLeft, Math.max(0, top - delta), true);
+        } else {
+          r.prev();
+        }
+      } else {
+        const scrollLeft = container.scrollLeft;
+        if (scrollLeft > 0) {
+          mgr.scrollTo(Math.max(0, scrollLeft - delta), 0, true);
+        } else {
+          r.prev();
+        }
+      }
     } else if (book?.format === 'txt') {
       const el = document.querySelector('[data-txt-container]') as HTMLElement;
       if (!el) return;
@@ -312,7 +343,31 @@ export default function BookReader() {
 
   const goNext = useCallback(() => {
     if (book?.format === 'epub') {
-      renditionRef.current?.next();
+      const r = renditionRef.current;
+      if (!r) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mgr = (r as any).manager;
+      if (!mgr) { r.next(); return; }
+      const container = mgr.container as HTMLElement;
+      const delta = mgr.layout?.delta || container.offsetWidth;
+
+      if (settings.writingMode === 'vertical') {
+        const top = container.scrollTop;
+        const maxTop = container.scrollHeight - container.offsetHeight;
+        if (top < maxTop - 2) {
+          mgr.scrollTo(container.scrollLeft, Math.min(maxTop, top + delta), true);
+        } else {
+          r.next();
+        }
+      } else {
+        const scrollLeft = container.scrollLeft;
+        const maxScroll = container.scrollWidth - container.offsetWidth;
+        if (scrollLeft < maxScroll - 2) {
+          mgr.scrollTo(Math.min(maxScroll, scrollLeft + delta), 0, true);
+        } else {
+          r.next();
+        }
+      }
     } else if (book?.format === 'txt') {
       const el = document.querySelector('[data-txt-container]') as HTMLElement;
       if (!el) return;
@@ -490,7 +545,7 @@ export default function BookReader() {
                   ...ReactReaderStyle.reader,
                   top: 0,
                   left: 0,
-                  bottom: 16,
+                  bottom: 0,
                   right: 0,
                 },
                 titleArea: { ...ReactReaderStyle.titleArea, display: 'none' },
@@ -509,7 +564,8 @@ export default function BookReader() {
                 rendition.themes.default(initialStyles);
 
                 // Hide scrollbars and disable text selection inside epub iframe
-                rendition.hooks.content.register((contents: { document: Document }) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                rendition.hooks.content.register((contents: any) => {
                   const style = contents.document.createElement('style');
                   style.textContent = `
                     html, body {
@@ -528,6 +584,44 @@ export default function BookReader() {
                     }
                   `;
                   contents.document.head.appendChild(style);
+                });
+
+                // epub.js sizes the iframe BEFORE theme styles (font-size etc.)
+                // are injected via content hooks. The view's expand() also has a bug
+                // where this.settings.axis is undefined so horizontal resize never runs.
+                // After rendering completes, we directly measure content scrollWidth and
+                // resize the iframe so our custom next/prev can scroll page-by-page.
+                // Also fix container direction: epub.js may set direction:rtl from book
+                // metadata, but when we force horizontal-tb the content is LTR.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                rendition.on('rendered', (_section: any, view: any) => {
+                  const win = view?.contents?.document?.defaultView;
+                  if (!win) return;
+                  win.requestAnimationFrame(() => {
+                    const body = view?.contents?.document?.body;
+                    const iframe = view?.iframe;
+                    const element = view?.element;
+                    if (!body || !iframe) return;
+
+                    // Fix container direction for horizontal mode
+                    const container = iframe.parentElement?.parentElement;
+                    if (container && settingsRef.current.writingMode !== 'vertical') {
+                      container.style.direction = 'ltr';
+                    }
+
+                    const scrollW = body.scrollWidth;
+                    const pageW = view?.layout?.pageWidth || iframe.offsetWidth;
+                    if (pageW <= 0 || scrollW <= pageW) return;
+
+                    const newW = Math.ceil(scrollW / pageW) * pageW;
+                    iframe.style.width = newW + 'px';
+                    if (element) element.style.width = newW + 'px';
+                    // Update epub.js internal tracking
+                    if (view._width !== undefined) view._width = newW;
+
+                    // Reset scroll position to start
+                    if (container) container.scrollLeft = 0;
+                  });
                 });
 
                 // Generate location map for page numbers
