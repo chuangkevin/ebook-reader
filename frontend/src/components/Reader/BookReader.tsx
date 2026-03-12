@@ -467,13 +467,6 @@ export default function BookReader() {
           <Box sx={{
             flex: 1, height: '100%', position: 'relative',
             overflow: 'hidden',
-            // Disable react-reader's SwipeWrapper and iframe pointer events
-            // so our overlay handles all interaction
-            '& div[style*="height: 100%"]': { pointerEvents: 'none' },
-            '& iframe': { pointerEvents: 'none' },
-            // Hide scrollbars
-            '& *': { scrollbarWidth: 'none', msOverflowStyle: 'none' },
-            '& *::-webkit-scrollbar': { display: 'none' },
           }}>
             <ReactReader
               url={epubData}
@@ -485,7 +478,7 @@ export default function BookReader() {
               epubOptions={{
                 flow: 'paginated',
                 spread: 'none',
-                gap: 0,
+                gap: 40,
               } as Record<string, unknown>}
               readerStyles={{
                 ...ReactReaderStyle,
@@ -520,7 +513,6 @@ export default function BookReader() {
                   const style = contents.document.createElement('style');
                   style.textContent = `
                     html, body {
-                      overflow: hidden !important;
                       scrollbar-width: none !important;
                       -ms-overflow-style: none !important;
                     }
@@ -574,19 +566,7 @@ export default function BookReader() {
                 }
               }}
             />
-            {/* Transparent touch overlay — captures all taps/swipes */}
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                zIndex: 3,
-                touchAction: 'pan-x',
-                WebkitTouchCallout: 'none',
-                WebkitUserSelect: 'none',
-              }}
-              onPointerDown={handlePointerDown}
-              onPointerUp={handlePointerUp}
-            />
+            {/* Touch overlay removed - use outer Box for tap/swipe instead */}
           </Box>
         );
     }
