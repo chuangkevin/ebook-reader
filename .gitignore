@@ -6,3 +6,5 @@ logs/
 .env
 .DS_Store
 .mcp.json
+screenshots/
+test-results/
