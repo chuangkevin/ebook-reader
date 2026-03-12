@@ -182,7 +182,8 @@ function buildEpubStyles(
       '-webkit-user-select': 'none !important',
       'user-select': 'none !important',
     },
-    'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
+    // Wildcard ensures inline styles and uncommon elements are overridden
+    '*': {
       'font-size': `${fontSize}px !important`,
       'line-height': `${lineHeight} !important`,
       'text-align': `${textAlign} !important`,
@@ -623,6 +624,8 @@ export default function BookReader() {
                     html, body {
                       scrollbar-width: none !important;
                       -ms-overflow-style: none !important;
+                      overflow: hidden !important;
+                      max-height: 100vh !important;
                     }
                     html::-webkit-scrollbar, body::-webkit-scrollbar {
                       display: none !important;
@@ -655,11 +658,16 @@ export default function BookReader() {
                     const element = view?.element;
                     if (!body || !iframe) return;
 
-                    // Fix container direction for horizontal mode
                     const container = iframe.parentElement?.parentElement;
+
+                    // Fix container direction for horizontal mode
                     if (container && settingsRef.current.writingMode !== 'vertical') {
                       container.style.direction = 'ltr';
                     }
+
+                    // iOS Safari expands iframes to content size — force constrain
+                    iframe.style.maxHeight = '100%';
+                    iframe.style.overflow = 'hidden';
 
                     const scrollW = body.scrollWidth;
                     const delta = view?.layout?.delta || iframe.offsetWidth;
