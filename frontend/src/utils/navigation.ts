@@ -1,26 +1,89 @@
-import type { TapZoneLayout } from '../store/settingsSlice';
+import type { TapMode, HandPreference } from '../store/settingsSlice';
+
+export interface TapZone {
+  action: 'prev' | 'next';
+  side: 'left' | 'right';
+  vertical: 'top' | 'bottom' | 'full';
+}
+
+function flip(action: 'prev' | 'next'): 'prev' | 'next' {
+  return action === 'prev' ? 'next' : 'prev';
+}
 
 /**
- * Determine action based on tap position and layout preference.
- * @param zone 0-1, horizontal position within container
- * @param layout tap zone layout setting
+ * Get the tap zone layout configuration for overlay rendering.
+ */
+export function getTapZones(tapMode: TapMode, hand: HandPreference, invert = false): TapZone[] {
+  let zones: TapZone[];
+
+  if (tapMode === 'same-side') {
+    const side = hand === 'left' ? 'left' : 'right';
+    zones = [
+      { action: 'prev', side, vertical: 'top' },
+      { action: 'next', side, vertical: 'bottom' },
+    ];
+  } else if (hand === 'left') {
+    zones = [
+      { action: 'next', side: 'left', vertical: 'full' },
+      { action: 'prev', side: 'right', vertical: 'full' },
+    ];
+  } else {
+    zones = [
+      { action: 'prev', side: 'left', vertical: 'full' },
+      { action: 'next', side: 'right', vertical: 'full' },
+    ];
+  }
+
+  if (invert) {
+    return zones.map(z => ({ ...z, action: flip(z.action) }));
+  }
+  return zones;
+}
+
+/**
+ * Determine action based on tap position.
  */
 export function getTapAction(
-  zone: number,
-  layout: TapZoneLayout,
+  x: number,
+  y: number,
+  tapMode: TapMode,
+  hand: HandPreference,
+  invert = false,
 ): 'prev' | 'next' | 'toggle' {
-  if (zone >= 0.3 && zone <= 0.7) return 'toggle';
+  let result: 'prev' | 'next' | 'toggle';
 
-  const isLeftZone = zone < 0.3;
+  if (tapMode === 'same-side') {
+    const navSide = hand === 'left' ? 'left' : 'right';
+    const ZONE_WIDTH = 0.35;
 
-  switch (layout) {
-    case 'left-hand':
-      // Left-hand: left tap = next (thumb forward), right tap = prev
-      return isLeftZone ? 'next' : 'prev';
-    case 'right-hand':
-    case 'default':
-    default:
-      // Right-hand/default: left tap = prev, right tap = next
-      return isLeftZone ? 'prev' : 'next';
+    if (navSide === 'left') {
+      if (x < ZONE_WIDTH) {
+        result = y < 0.5 ? 'prev' : 'next';
+      } else {
+        result = 'toggle';
+      }
+    } else {
+      if (x > (1 - ZONE_WIDTH)) {
+        result = y < 0.5 ? 'prev' : 'next';
+      } else {
+        result = 'toggle';
+      }
+    }
+  } else {
+    if (x >= 0.3 && x <= 0.7) {
+      result = 'toggle';
+    } else {
+      const isLeftZone = x < 0.3;
+      if (hand === 'left') {
+        result = isLeftZone ? 'next' : 'prev';
+      } else {
+        result = isLeftZone ? 'prev' : 'next';
+      }
+    }
   }
+
+  if (invert && result !== 'toggle') {
+    return flip(result);
+  }
+  return result;
 }

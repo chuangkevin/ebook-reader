@@ -100,7 +100,8 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
     const rect = el.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const zone = x / rect.width;
-    const action = getTapAction(zone, settings.tapZoneLayout);
+    const y = (e.clientY - rect.top) / rect.height;
+    const action = getTapAction(zone, y, settings.tapMode, settings.handPreference, settings.invertPageTurn);
 
     if (action === 'toggle') {
       onToggleBar();
@@ -122,7 +123,7 @@ export default function TxtReader({ url, initialPercentage, onProgressChange, on
         el.scrollBy({ top: -pageHeight, behavior: 'smooth' });
       }
     }
-  }, [onToggleBar, isVertical, settings.tapZoneLayout]);
+  }, [onToggleBar, isVertical, settings.tapMode, settings.handPreference]);
 
   if (loading) {
     return (

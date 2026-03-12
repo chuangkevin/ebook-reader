@@ -90,14 +90,15 @@ export default function PdfReader({ url, initialPage, onProgressChange, onToggle
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = e.clientX - rect.left;
     const zone = x / rect.width;
-    const action = getTapAction(zone, settings.tapZoneLayout);
+    const y = (e.clientY - rect.top) / rect.height;
+    const action = getTapAction(zone, y, settings.tapMode, settings.handPreference, settings.invertPageTurn);
 
     switch (action) {
       case 'prev': goToPage(pageNumber - 1); break;
       case 'next': goToPage(pageNumber + 1); break;
       case 'toggle': onToggleBar(); break;
     }
-  }, [goToPage, pageNumber, onToggleBar, settings.tapZoneLayout]);
+  }, [goToPage, pageNumber, onToggleBar, settings.tapMode, settings.handPreference]);
 
   // Swipe handlers for mobile
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -131,7 +132,8 @@ export default function PdfReader({ url, initialPage, onProgressChange, onToggle
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const x = touch.clientX - rect.left;
       const zone = x / rect.width;
-      const action = getTapAction(zone, settings.tapZoneLayout);
+      const y = (touch.clientY - rect.top) / rect.height;
+      const action = getTapAction(zone, y, settings.tapMode, settings.handPreference, settings.invertPageTurn);
 
       switch (action) {
         case 'prev': goToPage(pageNumber - 1); break;
@@ -139,7 +141,7 @@ export default function PdfReader({ url, initialPage, onProgressChange, onToggle
         case 'toggle': onToggleBar(); break;
       }
     }
-  }, [goToPage, pageNumber, onToggleBar, settings.tapZoneLayout]);
+  }, [goToPage, pageNumber, onToggleBar, settings.tapMode, settings.handPreference]);
 
   return (
     <Box

@@ -20,11 +20,15 @@ import {
   setLineHeight,
   setWritingMode,
   setConvertToTraditional,
-  setTapZoneLayout,
+  setTapMode,
+  setHandPreference,
+  setInvertPageTurn,
   setVolumeKeyNav,
+  setShowTapZones,
   type ThemeMode,
   type WritingMode,
-  type TapZoneLayout,
+  type TapMode,
+  type HandPreference,
 } from '../../store/settingsSlice';
 
 interface ReaderSettingsProps {
@@ -129,21 +133,59 @@ export default function ReaderSettings({ open, onClose }: ReaderSettingsProps) {
           <ToggleButton value="vertical">直排</ToggleButton>
         </ToggleButtonGroup>
 
-        {/* Tap Zone Layout */}
+        {/* Tap Mode */}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          翻頁區域
+          翻頁模式
         </Typography>
         <ToggleButtonGroup
-          value={settings.tapZoneLayout}
+          value={settings.tapMode}
           exclusive
-          onChange={(_, val) => val && dispatch(setTapZoneLayout(val as TapZoneLayout))}
+          onChange={(_, val) => val && dispatch(setTapMode(val as TapMode))}
           fullWidth
-          sx={{ mb: 3 }}
+          sx={{ mb: 2 }}
         >
-          <ToggleButton value="default">預設</ToggleButton>
-          <ToggleButton value="left-hand">左手</ToggleButton>
-          <ToggleButton value="right-hand">右手</ToggleButton>
+          <ToggleButton value="same-side">同側翻頁</ToggleButton>
+          <ToggleButton value="two-side">兩側翻頁</ToggleButton>
         </ToggleButtonGroup>
+
+        {/* Hand Preference */}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          慣用手
+        </Typography>
+        <ToggleButtonGroup
+          value={settings.handPreference}
+          exclusive
+          onChange={(_, val) => val && dispatch(setHandPreference(val as HandPreference))}
+          fullWidth
+          sx={{ mb: 2 }}
+        >
+          <ToggleButton value="left">左手</ToggleButton>
+          <ToggleButton value="right">右手</ToggleButton>
+        </ToggleButtonGroup>
+
+        {/* Invert page turn */}
+        <FormControlLabel
+          control={
+            <Switch
+              checked={settings.invertPageTurn}
+              onChange={(e) => dispatch(setInvertPageTurn(e.target.checked))}
+            />
+          }
+          label="對調上下頁方向"
+          sx={{ mb: 1 }}
+        />
+
+        {/* Show Tap Zones */}
+        <FormControlLabel
+          control={
+            <Switch
+              checked={settings.showTapZones}
+              onChange={(e) => dispatch(setShowTapZones(e.target.checked))}
+            />
+          }
+          label="顯示翻頁區域"
+          sx={{ mb: 1 }}
+        />
 
         {/* Volume key navigation */}
         <FormControlLabel
