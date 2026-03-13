@@ -222,6 +222,8 @@ export default function BookReader() {
   const locationRef = useRef<string | null>(null);
   const percentageRef = useRef(0);
   const renditionRef = useRef<EpubRendition | null>(null);
+  // Tracks the page number at the start of the current chapter (set by 'relocated' event)
+  const chapterStartPageRef = useRef(1);
 
   const goPrevRef = useRef<() => void>(() => {});
   const goNextRef = useRef<() => void>(() => {});
@@ -329,8 +331,11 @@ export default function BookReader() {
     setShowBar(prev => !prev);
   }, []);
 
-  // After silent scrolling, estimate percentage from scroll position.
-  // We avoid calling epub.js reportLocation() which triggers a full re-render.
+  // After silent scrolling within a chapter, update the page number display only.
+  // Percentage is NOT updated here — it is managed exclusively by the 'relocated'
+  // event which uses epub.js CFI-based locations (accurate character-level positions).
+  // Estimating percentage from spine-item count gives wrong results because chapters
+  // have different lengths (e.g. chapter 5 at 20% CFI but 40% by spine-item count).
   const updatePageAfterScroll = useCallback(() => {
     const r = renditionRef.current;
     if (!r) return;
@@ -338,39 +343,18 @@ export default function BookReader() {
     const mgr = (r as any).manager;
     if (!mgr) return;
     const container = mgr.container as HTMLElement;
-    const views = mgr.views;
-    if (!views?.length) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const view = views.first() || views[0];
-    const section = view?.section;
-    if (!section) return;
+    // Count pages scrolled within the current chapter using the column delta
+    const delta = mgr.layout?.delta || container.offsetWidth;
+    if (delta <= 0) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const spine = (r as any).book?.spine;
-    if (!spine) return;
-    const spineItems = spine.items || spine.spineItems || [];
-    const totalSections = spineItems.length || 1;
-    const sectionIndex = section.index ?? 0;
-
-    // Fraction within current section based on scroll
     const isVert = settingsRef.current.writingMode === 'vertical';
-    let scrollFrac = 0;
-    if (isVert) {
-      const max = container.scrollHeight - container.offsetHeight;
-      scrollFrac = max > 0 ? container.scrollTop / max : 0;
-    } else {
-      const max = container.scrollWidth - container.offsetWidth;
-      scrollFrac = max > 0 ? container.scrollLeft / max : 0;
-    }
+    const pagesScrolled = isVert
+      ? Math.round(container.scrollTop / delta)
+      : Math.round(container.scrollLeft / delta);
 
-    const pct = Math.round(((sectionIndex + scrollFrac) / totalSections) * 10000) / 100;
-    setPercentage(pct);
-    percentageRef.current = pct;
-
-    // Estimate page from total
     if (totalPages > 0) {
-      const estPage = Math.round(pct / 100 * totalPages) + 1;
+      const estPage = chapterStartPageRef.current + pagesScrolled;
       setCurrentPage(Math.min(estPage, totalPages));
     }
   }, [totalPages]);
@@ -742,7 +726,10 @@ export default function BookReader() {
 
                   try {
                     const page = r.book.locations.locationFromCfi(loc.start.cfi);
-                    if (page >= 0) setCurrentPage(page + 1);
+                    if (page >= 0) {
+                      setCurrentPage(page + 1);
+                      chapterStartPageRef.current = page + 1;
+                    }
                   } catch { /* locations not ready */ }
                 });
 
