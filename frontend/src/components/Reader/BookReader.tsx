@@ -367,12 +367,12 @@ export default function BookReader() {
     }
   }, [totalPages]);
 
-  // Custom prev/next for vertical mode (scrollTop-based) — epub.js's
-  // built-in vertical paginated scrolling uses layout.height which can
-  // be wrong.  For horizontal mode we now rely on epub.js's built-in
-  // next()/prev() because the rendered handler fixes the two root causes:
-  //   1. element.minWidth prevents flex shrink (fixes scrollWidth === offsetWidth)
-  //   2. mgr.settings.direction = 'ltr' (fixes scrollBy() negating x for RTL books)
+  // Custom prev/next that scrolls the epub.js container directly.
+  // epub.js's built-in next()/prev() breaks when the container has
+  // direction:rtl (from book metadata) but content is horizontal-tb (LTR).
+  // We use mgr.scrollTo(x,y,true) for silent scrolling (suppresses scroll
+  // events that would trigger a full re-render chain).
+  // mgr.scrollBy() is NOT usable because it multiplies x by -1 for RTL.
   const goPrev = useCallback(() => {
     if (book?.format === 'epub') {
       const r = renditionRef.current;
@@ -380,10 +380,15 @@ export default function BookReader() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mgr = (r as any).manager;
       if (!mgr) { r.prev(); return; }
+      const container = mgr.container as HTMLElement;
+      // For horizontal: delta = column width (epub.js layout, or container width as fallback)
+      // For vertical: delta = viewport height (one page = one screen height)
+      const isVertPrev = settings.writingMode === 'vertical';
+      const delta = isVertPrev
+        ? container.offsetHeight
+        : (mgr.layout?.delta || container.offsetWidth);
 
-      if (settings.writingMode === 'vertical') {
-        const container = mgr.container as HTMLElement;
-        const delta = container.offsetHeight;
+      if (isVertPrev) {
         const top = container.scrollTop;
         if (top > 0) {
           mgr.scrollTo(container.scrollLeft, Math.max(0, top - delta), true);
@@ -392,7 +397,13 @@ export default function BookReader() {
           r.prev();
         }
       } else {
-        r.prev();
+        const scrollLeft = container.scrollLeft;
+        if (scrollLeft > 0) {
+          mgr.scrollTo(Math.max(0, scrollLeft - delta), 0, true);
+          updatePageAfterScroll();
+        } else {
+          r.prev();
+        }
       }
     } else if (book?.format === 'txt') {
       const el = document.querySelector('[data-txt-container]') as HTMLElement;
@@ -413,10 +424,13 @@ export default function BookReader() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mgr = (r as any).manager;
       if (!mgr) { r.next(); return; }
+      const container = mgr.container as HTMLElement;
+      const isVertNext = settings.writingMode === 'vertical';
+      const delta = isVertNext
+        ? container.offsetHeight
+        : (mgr.layout?.delta || container.offsetWidth);
 
-      if (settings.writingMode === 'vertical') {
-        const container = mgr.container as HTMLElement;
-        const delta = container.offsetHeight;
+      if (isVertNext) {
         const top = container.scrollTop;
         const maxTop = container.scrollHeight - container.offsetHeight;
         if (top < maxTop - 2) {
@@ -426,7 +440,14 @@ export default function BookReader() {
           r.next();
         }
       } else {
-        r.next();
+        const scrollLeft = container.scrollLeft;
+        const maxScroll = container.scrollWidth - container.offsetWidth;
+        if (scrollLeft < maxScroll - 2) {
+          mgr.scrollTo(Math.min(maxScroll, scrollLeft + delta), 0, true);
+          updatePageAfterScroll();
+        } else {
+          r.next();
+        }
       }
     } else if (book?.format === 'txt') {
       const el = document.querySelector('[data-txt-container]') as HTMLElement;
@@ -697,13 +718,9 @@ export default function BookReader() {
 
                     const container = iframeEl.parentElement?.parentElement;
 
-                    // Fix container direction for horizontal mode and sync
-                    // epub.js internal direction so scrollBy() doesn't negate x.
+                    // Fix container direction for horizontal mode
                     if (container && settingsRef.current.writingMode !== 'vertical') {
                       container.style.direction = 'ltr';
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      const mgr = (renditionRef.current as any)?.manager;
-                      if (mgr) mgr.settings.direction = 'ltr';
                     }
 
                     // Keep scrollbars hidden (scrolling="auto" may show them)
@@ -716,14 +733,7 @@ export default function BookReader() {
                     // Align iframe width to delta so scrolling lands on column boundaries
                     const newW = Math.ceil(scrollW / delta) * delta;
                     iframeEl.style.width = newW + 'px';
-                    if (element) {
-                      element.style.width = newW + 'px';
-                      // Prevent flex container from shrinking child back to
-                      // container width — without this, container.scrollWidth
-                      // equals container.offsetWidth and every page-turn
-                      // becomes a chapter-jump.
-                      element.style.minWidth = newW + 'px';
-                    }
+                    if (element) element.style.width = newW + 'px';
                     // Update epub.js internal tracking
                     if (view._width !== undefined) view._width = newW;
 
