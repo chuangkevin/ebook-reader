@@ -189,6 +189,7 @@ function buildFontCSS(
 ): string {
   const textAlign = writingMode === 'vertical' ? 'start' : 'left';
   return `
+    ${writingMode === 'horizontal' ? 'html, body { direction: ltr !important; }' : ''}
     :root * {
       font-size: ${fontSize}px !important;
       line-height: ${lineHeight} !important;
@@ -344,11 +345,13 @@ export default function BookReader() {
     if (!mgr) return;
     const container = mgr.container as HTMLElement;
 
-    // Count pages scrolled within the current chapter using the column delta
-    const delta = mgr.layout?.delta || container.offsetWidth;
-    if (delta <= 0) return;
-
     const isVert = settingsRef.current.writingMode === 'vertical';
+    // For horizontal: delta = column width (from epub.js layout, or container width as fallback)
+    // For vertical: delta = viewport height (one page = one screen height)
+    const delta = isVert
+      ? container.offsetHeight
+      : (mgr.layout?.delta || container.offsetWidth);
+    if (delta <= 0) return;
     const pagesScrolled = isVert
       ? Math.round(container.scrollTop / delta)
       : Math.round(container.scrollLeft / delta);
@@ -373,11 +376,14 @@ export default function BookReader() {
       const mgr = (r as any).manager;
       if (!mgr) { r.prev(); return; }
       const container = mgr.container as HTMLElement;
-      // delta = container width = column content + padding = actual column step
-      // (body has box-sizing:border-box, so column-width is clamped to content area)
-      const delta = mgr.layout?.delta || container.offsetWidth;
+      // For horizontal: delta = column width (epub.js layout, or container width as fallback)
+      // For vertical: delta = viewport height (one page = one screen height)
+      const isVertPrev = settings.writingMode === 'vertical';
+      const delta = isVertPrev
+        ? container.offsetHeight
+        : (mgr.layout?.delta || container.offsetWidth);
 
-      if (settings.writingMode === 'vertical') {
+      if (isVertPrev) {
         const top = container.scrollTop;
         if (top > 0) {
           mgr.scrollTo(container.scrollLeft, Math.max(0, top - delta), true);
@@ -414,9 +420,12 @@ export default function BookReader() {
       const mgr = (r as any).manager;
       if (!mgr) { r.next(); return; }
       const container = mgr.container as HTMLElement;
-      const delta = mgr.layout?.delta || container.offsetWidth;
+      const isVertNext = settings.writingMode === 'vertical';
+      const delta = isVertNext
+        ? container.offsetHeight
+        : (mgr.layout?.delta || container.offsetWidth);
 
-      if (settings.writingMode === 'vertical') {
+      if (isVertNext) {
         const top = container.scrollTop;
         const maxTop = container.scrollHeight - container.offsetHeight;
         if (top < maxTop - 2) {
