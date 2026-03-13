@@ -442,6 +442,28 @@ export default function BookReader() {
       } else {
         const scrollLeft = container.scrollLeft;
         const maxScroll = container.scrollWidth - container.offsetWidth;
+        const debugInfo = {
+          scrollLeft,
+          maxScroll,
+          scrollW: container.scrollWidth,
+          offsetW: container.offsetWidth,
+          delta,
+          dir: mgr.settings?.direction,
+          isPag: mgr.isPaginated,
+          axis: mgr.settings?.axis,
+          childW: (container.firstElementChild as HTMLElement)?.offsetWidth,
+          flexShrink: (container.firstElementChild as HTMLElement)?.style.flexShrink || 'default',
+          willJump: !(scrollLeft < maxScroll - 2),
+        };
+        // Show debug overlay on screen for mobile testing
+        let overlay = document.getElementById('__debug_overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = '__debug_overlay';
+          overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:rgba(0,0,0,0.85);color:#0f0;font:12px monospace;padding:8px;white-space:pre-wrap;pointer-events:none;';
+          document.body.appendChild(overlay);
+        }
+        overlay.textContent = JSON.stringify(debugInfo, null, 1);
         if (scrollLeft < maxScroll - 2) {
           mgr.scrollTo(Math.min(maxScroll, scrollLeft + delta), 0, true);
           updatePageAfterScroll();
@@ -736,6 +758,25 @@ export default function BookReader() {
                     if (element) element.style.width = newW + 'px';
                     // Update epub.js internal tracking
                     if (view._width !== undefined) view._width = newW;
+
+                    // DEBUG: show rendered info on screen
+                    const rInfo = {
+                      bodyScrollW: scrollW,
+                      delta,
+                      newW,
+                      elemOffsetW: element?.offsetWidth,
+                      ctnrScrollW: container?.scrollWidth,
+                      ctnrOffsetW: container?.offsetWidth,
+                      flexShrink: element ? getComputedStyle(element).flexShrink : null,
+                    };
+                    let ro = document.getElementById('__debug_rendered');
+                    if (!ro) {
+                      ro = document.createElement('div');
+                      ro.id = '__debug_rendered';
+                      ro.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:rgba(0,0,80,0.85);color:#ff0;font:11px monospace;padding:6px;white-space:pre-wrap;pointer-events:none;';
+                      document.body.appendChild(ro);
+                    }
+                    ro.textContent = '[rendered] ' + JSON.stringify(rInfo, null, 1);
 
                     // Reset scroll position to start
                     if (container) container.scrollLeft = 0;
