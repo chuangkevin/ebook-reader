@@ -188,8 +188,13 @@ function buildFontCSS(
   writingMode: 'horizontal' | 'vertical',
 ): string {
   const textAlign = writingMode === 'vertical' ? 'start' : 'left';
+  const directionRule = writingMode === 'horizontal' ? 'direction: ltr !important;' : '';
   return `
-    ${writingMode === 'horizontal' ? 'html, body { direction: ltr !important; }' : ''}
+    html, body {
+      -webkit-text-size-adjust: 100% !important;
+      text-size-adjust: 100% !important;
+      ${directionRule}
+    }
     :root * {
       font-size: ${fontSize}px !important;
       line-height: ${lineHeight} !important;
@@ -679,47 +684,62 @@ export default function BookReader() {
                 });
 
                 // epub.js sizes the iframe BEFORE theme styles (font-size etc.)
-                // are injected via content hooks. The view's expand() also has a bug
-                // where this.settings.axis is undefined so horizontal resize never runs.
-                // After rendering completes, we directly measure content scrollWidth and
-                // resize the iframe so our custom next/prev can scroll page-by-page.
+                // are injected via content hooks. After rendering completes, we measure
+                // content scrollWidth and resize the iframe so our custom next/prev can
+                // scroll page-by-page.
                 // Also fix container direction: epub.js may set direction:rtl from book
                 // metadata, but when we force horizontal-tb the content is LTR.
+                //
+                // iOS fix: epub.js sets iframe.scrolling="no" which prevents iOS Safari
+                // from respecting CSS width on the iframe element. We override it to
+                // "auto" so iOS honours our iframe.style.width changes. (epub.js source
+                // comment: "Might need to be removed: breaks ios width calculations")
+                //
+                // We use window.setTimeout(fn, 0) instead of the iframe's own RAF
+                // because the iframe is still visibility:hidden when "rendered" fires
+                // (views.show() runs later in the promise chain). On iOS, RAF callbacks
+                // inside hidden iframes may be deferred indefinitely.
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 rendition.on('rendered', (_section: any, view: any) => {
-                  const win = view?.contents?.document?.defaultView;
-                  if (!win) return;
-                  win.requestAnimationFrame(() => {
-                    const body = view?.contents?.document?.body;
-                    const iframe = view?.iframe;
-                    const element = view?.element;
-                    if (!body || !iframe) return;
+                  const iframe = view?.iframe;
+                  if (!iframe) return;
 
-                    const container = iframe.parentElement?.parentElement;
+                  // Remove scrolling="no" early so iOS respects subsequent CSS width changes
+                  iframe.scrolling = 'auto';
+
+                  // setTimeout(0) fires after all pending microtasks (including
+                  // views.show() which makes the iframe visible), ensuring that iOS
+                  // has processed the iframe visibility and layout before we measure.
+                  window.setTimeout(() => {
+                    const body = view?.contents?.document?.body;
+                    const iframeEl = view?.iframe;
+                    const element = view?.element;
+                    if (!body || !iframeEl) return;
+
+                    const container = iframeEl.parentElement?.parentElement;
 
                     // Fix container direction for horizontal mode
                     if (container && settingsRef.current.writingMode !== 'vertical') {
                       container.style.direction = 'ltr';
                     }
 
-                    // iOS Safari expands iframes to content size — force constrain
-                    iframe.style.maxHeight = '100%';
-                    iframe.style.overflow = 'hidden';
+                    // Keep scrollbars hidden (scrolling="auto" may show them)
+                    iframeEl.style.overflow = 'hidden';
 
                     const scrollW = body.scrollWidth;
-                    const delta = view?.layout?.delta || iframe.offsetWidth;
+                    const delta = view?.layout?.delta || iframeEl.offsetWidth;
                     if (delta <= 0 || scrollW <= delta) return;
 
                     // Align iframe width to delta so scrolling lands on column boundaries
                     const newW = Math.ceil(scrollW / delta) * delta;
-                    iframe.style.width = newW + 'px';
+                    iframeEl.style.width = newW + 'px';
                     if (element) element.style.width = newW + 'px';
                     // Update epub.js internal tracking
                     if (view._width !== undefined) view._width = newW;
 
                     // Reset scroll position to start
                     if (container) container.scrollLeft = 0;
-                  });
+                  }, 0);
                 });
 
                 // Generate location map for page numbers
