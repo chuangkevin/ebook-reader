@@ -159,13 +159,9 @@ function TocDrawer({ open, onClose, toc, onSelect }: {
 /* ── Helper: build epub theme styles ──────────────────────── */
 function buildEpubStyles(
   theme: { bg: string; fg: string },
-  fontSize: number,
-  lineHeight: number,
   writingMode: 'horizontal' | 'vertical',
 ): Record<string, Record<string, string>> {
   const wm = writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb';
-  // In horizontal mode: left-align; in vertical mode: start = top-aligned
-  const textAlign = writingMode === 'vertical' ? 'start' : 'left';
   return {
     'html': {
       'writing-mode': `${wm} !important`,
@@ -174,21 +170,35 @@ function buildEpubStyles(
     'body': {
       'background-color': `${theme.bg} !important`,
       'color': `${theme.fg} !important`,
-      'font-size': `${fontSize}px !important`,
-      'line-height': `${lineHeight} !important`,
       'writing-mode': `${wm} !important`,
       '-webkit-writing-mode': `${wm} !important`,
-      'text-align': `${textAlign} !important`,
       '-webkit-user-select': 'none !important',
       'user-select': 'none !important',
     },
-    // Wildcard ensures inline styles and uncommon elements are overridden
-    '*': {
-      'font-size': `${fontSize}px !important`,
-      'line-height': `${lineHeight} !important`,
-      'text-align': `${textAlign} !important`,
-    },
   };
+}
+
+/* ── Helper: build font/layout CSS to inject via content hook ── */
+// Uses :root * (specificity 0,0,1,0) which beats element selectors like
+// `li` (0,0,0,1) from the EPUB's own CSS, preventing font-size overrides.
+function buildFontCSS(
+  theme: { bg: string; fg: string },
+  fontSize: number,
+  lineHeight: number,
+  writingMode: 'horizontal' | 'vertical',
+): string {
+  const textAlign = writingMode === 'vertical' ? 'start' : 'left';
+  return `
+    :root * {
+      font-size: ${fontSize}px !important;
+      line-height: ${lineHeight} !important;
+      text-align: ${textAlign} !important;
+      color: ${theme.fg} !important;
+    }
+    :root rt, :root rp {
+      font-size: 0.5em !important;
+    }
+  `;
 }
 
 /* ── Main BookReader ────────────────────────────────────── */
@@ -277,13 +287,33 @@ export default function BookReader() {
     return () => clearTimeout(timer);
   }, [showBar]);
 
-  // Apply EPUB theme styles when settings change (NO manual CSS columns)
+  // Keep font settings ref so content hooks can access current values
+  const fontSettingsRef = useRef({ fontSize: settings.fontSize, lineHeight: settings.lineHeight });
+  fontSettingsRef.current = { fontSize: settings.fontSize, lineHeight: settings.lineHeight };
+
+  // Apply EPUB theme styles when settings change
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition) return;
 
-    const styles = buildEpubStyles(theme, settings.fontSize, settings.lineHeight, settings.writingMode);
+    const styles = buildEpubStyles(theme, settings.writingMode);
     rendition.themes.default(styles);
+
+    // Re-inject font CSS into all loaded views
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contents = (rendition as any).getContents?.() ?? [];
+    const fontCSS = buildFontCSS(theme, settings.fontSize, settings.lineHeight, settings.writingMode);
+    for (const c of contents) {
+      try {
+        let el = c.document?.getElementById('__reader-font-style');
+        if (!el) {
+          el = c.document.createElement('style');
+          el.id = '__reader-font-style';
+          c.document.head.appendChild(el);
+        }
+        el.textContent = fontCSS;
+      } catch { /* ignore */ }
+    }
 
     // Force epub.js to re-render with new styles by redisplaying current location
     try {
@@ -458,12 +488,14 @@ export default function BookReader() {
           return;
       }
 
-      // Volume keys (Android/Boox) — keyCode 24=VolumeUp, 25=VolumeDown
+      // Volume keys (Android/Boox) — code 24=VolumeUp, 25=VolumeDown
       if (settings.volumeKeyNav) {
-        if (e.keyCode === 24) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const kc = (e as any).keyCode ?? 0;
+        if (kc === 24) {
           e.preventDefault();
           goPrev();
-        } else if (e.keyCode === 25) {
+        } else if (kc === 25) {
           e.preventDefault();
           goNext();
         }
@@ -610,22 +642,24 @@ export default function BookReader() {
                 renditionRef.current = rendition as unknown as EpubRendition;
                 const r = rendition as unknown as EpubRendition;
 
-                // Apply initial styles — only theme, NO manual column overrides
-                const initialStyles = buildEpubStyles(
-                  theme, settings.fontSize, settings.lineHeight, settings.writingMode,
-                );
-                rendition.themes.default(initialStyles);
+                // Apply initial theme (writing-mode, bg/fg colours)
+                rendition.themes.default(buildEpubStyles(theme, settings.writingMode));
 
-                // Hide scrollbars and disable text selection inside epub iframe
+                // Inject styles into each chapter's iframe
+                // NOTE: Do NOT set overflow:hidden on body here — epub.js reads
+                // body.scrollWidth to calculate column count. overflow:hidden
+                // clamps scrollWidth to viewport width, making every chapter
+                // appear as a single page and causing goNext() to jump chapters.
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 rendition.hooks.content.register((contents: any) => {
-                  const style = contents.document.createElement('style');
-                  style.textContent = `
+                  const doc = contents.document;
+
+                  // 1) Scrollbar hiding (no overflow:hidden on body!)
+                  const scrollStyle = doc.createElement('style');
+                  scrollStyle.textContent = `
                     html, body {
                       scrollbar-width: none !important;
                       -ms-overflow-style: none !important;
-                      overflow: hidden !important;
-                      max-height: 100vh !important;
                     }
                     html::-webkit-scrollbar, body::-webkit-scrollbar {
                       display: none !important;
@@ -638,7 +672,17 @@ export default function BookReader() {
                       user-select: none !important;
                     }
                   `;
-                  contents.document.head.appendChild(style);
+                  doc.head.appendChild(scrollStyle);
+
+                  // 2) Font / layout styles with high-specificity :root * selector
+                  //    so they beat the EPUB's own element selectors (li, p, etc.)
+                  const { fontSize, lineHeight } = fontSettingsRef.current;
+                  const fontStyle = doc.createElement('style');
+                  fontStyle.id = '__reader-font-style';
+                  fontStyle.textContent = buildFontCSS(
+                    theme, fontSize, lineHeight, settingsRef.current.writingMode,
+                  );
+                  doc.head.appendChild(fontStyle);
                 });
 
                 // epub.js sizes the iframe BEFORE theme styles (font-size etc.)
@@ -727,7 +771,8 @@ export default function BookReader() {
                 position: 'absolute',
                 top: 0, left: 0, right: 0, bottom: 0,
                 zIndex: 3,
-                touchAction: 'pan-x',
+                // 'none' required on iOS: 'pan-x' suppresses tap events on Safari
+                touchAction: 'none',
                 WebkitTouchCallout: 'none',
                 WebkitUserSelect: 'none',
               }}
@@ -747,7 +792,7 @@ export default function BookReader() {
       bgcolor: theme.bg,
       userSelect: 'none',
       WebkitUserSelect: 'none',
-      touchAction: 'manipulation',
+      touchAction: 'none',
       paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     }}>
       {/* Top Bar */}
