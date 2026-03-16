@@ -238,6 +238,9 @@ export default function BookReader() {
 
   // Debounce guard: prevent double-fire from overlay + outer Box
   const navLock = useRef(false);
+  // Tracks whether the last chapter jump was backward (r.prev()), so rendered
+  // handler can scroll to the last page instead of the first.
+  const prevJumpRef = useRef(false);
 
   // Pointer tracking for tap/swipe detection
   const pointerDownPos = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -467,6 +470,7 @@ export default function BookReader() {
           mgr.scrollTo(container.scrollLeft, Math.max(0, top - delta), true);
           updatePageAfterScroll();
         } else {
+          prevJumpRef.current = true;
           r.prev();
         }
       } else {
@@ -479,6 +483,7 @@ export default function BookReader() {
           container.scrollLeft = Math.max(0, scrollLeft - delta);
           updatePageAfterScroll();
         } else {
+          prevJumpRef.current = true;
           r.prev();
         }
       }
@@ -511,6 +516,7 @@ export default function BookReader() {
           mgr.scrollTo(container.scrollLeft, Math.min(maxTop, top + delta), true);
           updatePageAfterScroll();
         } else {
+          prevJumpRef.current = false;
           r.next();
         }
       } else {
@@ -525,6 +531,7 @@ export default function BookReader() {
           container.scrollLeft += delta;
           updatePageAfterScroll();
         } else {
+          prevJumpRef.current = false;
           r.next();
         }
       }
@@ -771,6 +778,23 @@ export default function BookReader() {
                     theme, fontSize, lineHeight, settingsRef.current.writingMode,
                   );
                   doc.head.appendChild(fontStyle);
+
+                  // 3) Forward keydown events from iframe to main window so keyboard
+                  //    navigation works even when the iframe has focus (e.g. after
+                  //    mode switch re-renders the iframe, or after tap inside content).
+                  doc.addEventListener('keydown', (e: KeyboardEvent) => {
+                    window.dispatchEvent(new KeyboardEvent('keydown', {
+                      key: e.key, code: e.code,
+                      keyCode: e.keyCode, which: e.which,
+                      ctrlKey: e.ctrlKey, shiftKey: e.shiftKey,
+                      altKey: e.altKey, metaKey: e.metaKey,
+                      bubbles: true,
+                    }));
+                    // Prevent default inside iframe to avoid double-scroll
+                    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown',' '].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  });
                 });
 
                 // On each rendered chapter, apply iOS and direction fixes.
@@ -905,14 +929,19 @@ export default function BookReader() {
                         capturedIframe.style.width = expandedW + 'px';
                       }
 
-                      // Restore horizontal scroll from saved progress (if any).
-                      // Must happen AFTER expansion so scrollWidth is correct.
-                      if (scrollRestoreRef.current !== null) {
-                        const frac = scrollRestoreRef.current;
-                        scrollRestoreRef.current = null; // Only restore once
-                        const mgr4 = (renditionRef.current as any)?.manager;
-                        const ec = mgr4?.container as HTMLElement | null;
-                        if (ec) {
+                      // After expansion, handle scroll positioning:
+                      const mgr4 = (renditionRef.current as any)?.manager;
+                      const ec = mgr4?.container as HTMLElement | null;
+                      if (ec) {
+                        if (prevJumpRef.current) {
+                          // Jumped backward (r.prev()) — scroll to last page
+                          prevJumpRef.current = false;
+                          const maxS = ec.scrollWidth - ec.offsetWidth;
+                          ec.scrollLeft = maxS;
+                        } else if (scrollRestoreRef.current !== null) {
+                          // Restore saved progress position
+                          const frac = scrollRestoreRef.current;
+                          scrollRestoreRef.current = null;
                           const maxS = ec.scrollWidth - ec.offsetWidth;
                           ec.scrollLeft = Math.round(frac * maxS);
                         }
@@ -959,14 +988,21 @@ export default function BookReader() {
                         }
                       }
 
-                      // Restore vertical scroll position from saved progress
-                      if (scrollRestoreRef.current !== null) {
-                        const frac = scrollRestoreRef.current;
-                        scrollRestoreRef.current = null;
-                        const mgr5 = (renditionRef.current as any)?.manager;
-                        const ec2 = mgr5?.container as HTMLElement | null;
-                        if (ec2) {
-                          // Need a frame for layout to settle after height change
+                      // Handle vertical scroll positioning after expansion
+                      const mgr5 = (renditionRef.current as any)?.manager;
+                      const ec2 = mgr5?.container as HTMLElement | null;
+                      if (ec2) {
+                        if (prevJumpRef.current) {
+                          // Jumped backward — scroll to last page
+                          prevJumpRef.current = false;
+                          requestAnimationFrame(() => {
+                            const maxS = ec2.scrollHeight - ec2.offsetHeight;
+                            ec2.scrollTop = maxS;
+                          });
+                        } else if (scrollRestoreRef.current !== null) {
+                          // Restore saved progress
+                          const frac = scrollRestoreRef.current;
+                          scrollRestoreRef.current = null;
                           requestAnimationFrame(() => {
                             const maxS = ec2.scrollHeight - ec2.offsetHeight;
                             ec2.scrollTop = Math.round(frac * maxS);
