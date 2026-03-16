@@ -867,7 +867,7 @@ export default function BookReader() {
                         capturedIframe.style.width = expandedW + 'px';
                       }
 
-                      // Restore scroll position from saved progress (if any).
+                      // Restore horizontal scroll from saved progress (if any).
                       // Must happen AFTER expansion so scrollWidth is correct.
                       if (scrollRestoreRef.current !== null) {
                         const frac = scrollRestoreRef.current;
@@ -877,7 +877,6 @@ export default function BookReader() {
                         if (ec) {
                           const maxS = ec.scrollWidth - ec.offsetWidth;
                           ec.scrollLeft = Math.round(frac * maxS);
-  
                         }
                       }
                     }, 60);
@@ -891,10 +890,19 @@ export default function BookReader() {
                       // Fix container direction so epub.js RTL metadata doesn't interfere.
                       const domContainer = iframeEl.parentElement?.parentElement;
                       if (domContainer) domContainer.style.direction = 'ltr';
-
-                      // Do NOT reset scrollLeft here — epub.js's display(cfi) may have
-                      // already positioned the container to restore a saved reading position.
-                      // Resetting to 0 would destroy that positioning.
+                    } else {
+                      // Vertical mode: restore scroll position from saved progress.
+                      // (Horizontal restore is in the 60ms timer above.)
+                      if (scrollRestoreRef.current !== null) {
+                        const frac = scrollRestoreRef.current;
+                        scrollRestoreRef.current = null;
+                        const mgr4 = (renditionRef.current as any)?.manager;
+                        const ec = mgr4?.container as HTMLElement | null;
+                        if (ec) {
+                          const maxS = ec.scrollHeight - ec.offsetHeight;
+                          ec.scrollTop = Math.round(frac * maxS);
+                        }
+                      }
                     }
                   }, 0);
                 });
