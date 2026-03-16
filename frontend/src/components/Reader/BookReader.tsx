@@ -755,7 +755,18 @@ export default function BookReader() {
                     // Align iframe width to delta so scrolling lands on column boundaries
                     const newW = Math.ceil(scrollW / delta) * delta;
                     iframeEl.style.width = newW + 'px';
-                    if (element) element.style.width = newW + 'px';
+                    if (element) {
+                      element.style.width = newW + 'px';
+                      // Prevent flex container from shrinking element back to container width.
+                      // epub.js sets display:flex on the epub-container; without minWidth the
+                      // element collapses → scrollWidth===offsetWidth → maxScroll=0 → chapter jump.
+                      element.style.minWidth = newW + 'px';
+                    }
+                    // Sync epub.js manager direction to ltr so scrollBy() doesn't negate x
+                    // for books whose epub metadata specifies direction:rtl.
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const mgrRef = (renditionRef.current as any)?.manager;
+                    if (mgrRef?.settings) mgrRef.settings.direction = 'ltr';
                     // Update epub.js internal tracking
                     if (view._width !== undefined) view._width = newW;
 
