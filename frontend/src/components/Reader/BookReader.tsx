@@ -625,7 +625,7 @@ export default function BookReader() {
               epubOptions={{
                 flow: 'paginated',
                 spread: 'none',
-                gap: 40,
+                gap: 0,
               } as Record<string, unknown>}
               readerStyles={{
                 ...ReactReaderStyle,
@@ -764,7 +764,7 @@ export default function BookReader() {
                       if (wmStyle) wmStyle.remove();
                       wmStyle = doc.createElement('style') as HTMLStyleElement;
                       wmStyle.id = '__reader-writing-mode';
-                      wmStyle.textContent = `html, body { writing-mode: horizontal-tb !important; -webkit-writing-mode: horizontal-tb !important; } body { column-width: ${pageW}px !important; -webkit-column-width: ${pageW}px !important; column-gap: 0px !important; }`;
+                      wmStyle.textContent = `html, body { writing-mode: horizontal-tb !important; -webkit-writing-mode: horizontal-tb !important; } body { column-width: ${pageW}px !important; -webkit-column-width: ${pageW}px !important; column-gap: 0px !important; padding: 0px !important; margin: 0px !important; }`;
                       doc.head.appendChild(wmStyle);
 
                       // Critical: epub.js may have expanded the iframe VERTICALLY (height=17134px)
@@ -803,8 +803,25 @@ export default function BookReader() {
                       if (capturedGen !== renderGenRef.current) return;
                       const currentDoc = capturedIframe.contentWindow?.document;
                       if (!currentDoc || !capturedIframe.isConnected) return;
+
+                      // Force layout properties via inline !important to beat any
+                      // epub.js inline-style overrides (epub.js may call
+                      // body.style.setProperty('padding', ..., 'important') in format()).
+                      // Inline !important wins over all author stylesheets.
+                      // We must set these BEFORE measuring textWidth so getBoundingClientRect
+                      // reflects the correct column layout (no padding shrinking content area).
+                      const body = currentDoc.body;
+                      body.style.setProperty('padding', '0px', 'important');
+                      body.style.setProperty('margin', '0px', 'important');
+                      body.style.setProperty('column-width', capturedPageW + 'px', 'important');
+                      body.style.setProperty('-webkit-column-width', capturedPageW + 'px', 'important');
+                      body.style.setProperty('column-gap', '0px', 'important');
+                      body.style.setProperty('-webkit-column-gap', '0px', 'important');
+
+                      // getBoundingClientRect forces synchronous reflow so it
+                      // returns the post-injection layout dimensions.
                       const range = currentDoc.createRange();
-                      range.selectNodeContents(currentDoc.body);
+                      range.selectNodeContents(body);
                       const textW = range.getBoundingClientRect().width;
                       if (textW > capturedPageW * 1.5) {
                         const expandedW = Math.ceil(textW / capturedPageW) * capturedPageW;
