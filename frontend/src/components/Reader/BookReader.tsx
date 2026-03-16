@@ -362,13 +362,12 @@ export default function BookReader() {
       if (delta <= 0) return;
       pagesScrolled = Math.round(container.scrollTop / delta);
     } else {
-      // Horizontal: navigate via iframe.contentWindow scroll, not outer container
-      const iframe = document.querySelector('iframe') as HTMLIFrameElement | null;
-      const win = iframe?.contentWindow;
-      if (!win) return;
-      delta = iframe?.offsetWidth || 1;
+      // Horizontal: epub.js expands the iframe to full content width and slides it
+      // inside the epub-container (overflow:hidden). Navigation scrolls container.scrollLeft.
+      const container = mgr.container as HTMLElement;
+      delta = container.offsetWidth;
       if (delta <= 0) return;
-      pagesScrolled = Math.round((win.scrollX || 0) / delta);
+      pagesScrolled = Math.round(container.scrollLeft / delta);
     }
 
     if (totalPages > 0) {
@@ -400,14 +399,13 @@ export default function BookReader() {
           r.prev();
         }
       } else {
-        // Horizontal: scroll inside the iframe
-        const iframe = document.querySelector('iframe') as HTMLIFrameElement | null;
-        const win = iframe?.contentWindow;
-        if (!win) { r.prev(); return; }
-        const delta = iframe?.offsetWidth || 1;
-        const scrollX = win.scrollX || 0;
-        if (scrollX > 0) {
-          win.scrollTo(Math.max(0, scrollX - delta), 0);
+        // Horizontal: epub.js expands the iframe wider than the container and scrolls
+        // container.scrollLeft (not iframe.contentWindow.scrollX) to navigate pages.
+        const container = mgr.container as HTMLElement;
+        const delta = container.offsetWidth;
+        const scrollLeft = container.scrollLeft;
+        if (scrollLeft > 0) {
+          container.scrollLeft = Math.max(0, scrollLeft - delta);
           updatePageAfterScroll();
         } else {
           r.prev();
@@ -445,15 +443,14 @@ export default function BookReader() {
           r.next();
         }
       } else {
-        // Horizontal: scroll inside the iframe
-        const iframe = document.querySelector('iframe') as HTMLIFrameElement | null;
-        const win = iframe?.contentWindow;
-        if (!win) { r.next(); return; }
-        const delta = iframe?.offsetWidth || 1;
-        const scrollX = win.scrollX || 0;
-        const maxScroll = win.document.documentElement.scrollWidth - delta;
-        if (scrollX < maxScroll - 2) {
-          win.scrollTo(scrollX + delta, 0);
+        // Horizontal: epub.js expands the iframe wider than the container and scrolls
+        // container.scrollLeft (not iframe.contentWindow.scrollX) to navigate pages.
+        const container = mgr.container as HTMLElement;
+        const delta = container.offsetWidth;
+        const scrollLeft = container.scrollLeft;
+        const maxScroll = container.scrollWidth - container.offsetWidth;
+        if (scrollLeft < maxScroll - 2) {
+          container.scrollLeft += delta;
           updatePageAfterScroll();
         } else {
           r.next();
@@ -671,7 +668,6 @@ export default function BookReader() {
                   wmStyle.id = '__reader-writing-mode';
                   wmStyle.textContent = `html, body { writing-mode: ${wm} !important; -webkit-writing-mode: ${wm} !important; }`;
                   doc.head.appendChild(wmStyle);
-
                   // 1) Scrollbar hiding (no overflow:hidden on body!)
                   const scrollStyle = doc.createElement('style');
                   scrollStyle.textContent = `
@@ -718,24 +714,111 @@ export default function BookReader() {
                   const iframe = view?.iframe;
                   if (!iframe) return;
 
-                  // Remove scrolling="no" early so iOS respects CSS changes
+                  // iOS fix: epub.js sets scrolling="no" which prevents scrollTo() on iOS.
                   iframe.scrolling = 'auto';
+
+                  const isHorizontal = settingsRef.current.writingMode !== 'vertical';
+
+                  if (isHorizontal) {
+                    // Root-cause fix for iOS/WebKit horizontal paging:
+                    //
+                    // Books that declare `writing-mode: vertical-rl !important` in their
+                    // own CSS (e.g. CJK novels) override our content-hook injection because
+                    // the book's stylesheets finish loading AFTER the hook fires. epub.js
+                    // then calls writingMode() during layout.format(), sees "vertical-rl",
+                    // and sets axis="vertical". In vertical mode:
+                    //   • epub-container display = "block" (not "flex")
+                    //   • CSS columns stack vertically  →  body.scrollWidth = 393px (1 page)
+                    //   • iframe.width stays 393px (not expanded to all pages)
+                    //   • goNext: scrollWidth - delta = 0  →  always calls r.next()  →  chapter jump
+                    //
+                    // Fix: re-inject our style here (last in the cascade, so it wins), then
+                    // force horizontal axis and re-expand the iframe.
+                    const win = iframe.contentWindow;
+                    const doc = win?.document;
+                    const mgr = (renditionRef.current as any)?.manager;
+                    // Viewport dimensions: use epub-container's clipped size
+                    const epubContainer = mgr?.container as HTMLElement | null;
+                    const pageW = epubContainer?.offsetWidth || iframe.offsetWidth || 390;
+                    const pageH = epubContainer?.offsetHeight || 659;
+
+                    if (doc) {
+                      // Re-inject LAST in cascade so it beats the book's !important rule.
+                      // Also force column-width = viewport WIDTH (epub.js may have set
+                      // column-width = page HEIGHT for vertical-rl books).
+                      // Remove any existing injected style and re-append at END of head.
+                      // This is required because the book's own CSS may have loaded AFTER
+                      // the content-hook injection, placing its !important writing-mode rule
+                      // later in the cascade. By moving our element last, we win cascade order.
+                      let wmStyle = doc.getElementById('__reader-writing-mode') as HTMLStyleElement | null;
+                      if (wmStyle) wmStyle.remove();
+                      wmStyle = doc.createElement('style') as HTMLStyleElement;
+                      wmStyle.id = '__reader-writing-mode';
+                      wmStyle.textContent = `html, body { writing-mode: horizontal-tb !important; -webkit-writing-mode: horizontal-tb !important; } body { column-width: ${pageW}px !important; -webkit-column-width: ${pageW}px !important; column-gap: 0px !important; }`;
+                      doc.head.appendChild(wmStyle);
+
+                      // Critical: epub.js may have expanded the iframe VERTICALLY (height=17134px)
+                      // in vertical mode. With such a tall iframe, all content fits in ONE
+                      // horizontal column → textWidth() = 393px (no overflow). We must reset
+                      // iframe height to viewport height BEFORE measuring, so content spills
+                      // into multiple horizontal columns and textWidth = N×pageWidth.
+                      if (parseInt(iframe.style.height || '0') > pageH * 1.5) {
+                        iframe.style.height = pageH + 'px';
+                      }
+                    }
+
+                    // Force horizontal axis so epub-container gets display:flex
+                    if (mgr && mgr.settings?.axis !== 'horizontal') {
+                      if (typeof mgr.updateAxis === 'function') {
+                        mgr.updateAxis('horizontal');
+                      }
+                    }
+
+                    // WebKit defers multi-column CSS layout computation: getBoundingClientRect()
+                    // immediately after CSS injection returns 353px (one page), but ~50ms later
+                    // the multi-column layout settles and returns the correct N×pageWidth value.
+                    // We defer expansion to after this settling delay.
+                    // WebKit defers multi-column CSS layout: getBoundingClientRect() at T=0
+                    // returns the single-page width (353px), but after ~50ms the browser
+                    // computes the full multi-column extent (10237px). We wait 60ms then:
+                    //   1. Measure the true textWidth
+                    //   2. Expand epub-view + iframe to N×pageWidth
+                    //   3. Set flex-shrink:0 so the flex container doesn't shrink it back
+                    //   4. container.scrollLeft can then navigate pages (0 → N-1 pages)
+                    const capturedIframe = iframe;
+                    const capturedPageW = pageW;
+                    window.setTimeout(() => {
+                      const currentDoc = capturedIframe.contentWindow?.document;
+                      if (!currentDoc) return;
+                      const range = currentDoc.createRange();
+                      range.selectNodeContents(currentDoc.body);
+                      const textW = range.getBoundingClientRect().width;
+                      if (textW > capturedPageW * 1.5) {
+                        const expandedW = Math.ceil(textW / capturedPageW) * capturedPageW;
+                        const epubViewEl = capturedIframe.parentElement as HTMLElement | null;
+                        if (epubViewEl) {
+                          epubViewEl.style.width = expandedW + 'px';
+                          epubViewEl.style.flexShrink = '0';
+                        }
+                        capturedIframe.style.width = expandedW + 'px';
+                      }
+                    }, 60);
+                  }
 
                   window.setTimeout(() => {
                     const iframeEl = view?.iframe;
                     if (!iframeEl) return;
 
-                    const container = iframeEl.parentElement?.parentElement;
+                    if (settingsRef.current.writingMode !== 'vertical') {
+                      // Fix container direction so epub.js RTL metadata doesn't interfere.
+                      const domContainer = iframeEl.parentElement?.parentElement;
+                      if (domContainer) domContainer.style.direction = 'ltr';
 
-                    // Fix container direction for horizontal mode so epub.js RTL metadata
-                    // doesn't interfere with our LTR horizontal layout.
-                    if (container && settingsRef.current.writingMode !== 'vertical') {
-                      container.style.direction = 'ltr';
-                    }
-
-                    // Reset inner scroll position to start of chapter
-                    if (iframeEl.contentWindow) {
-                      iframeEl.contentWindow.scrollTo(0, 0);
+                      // Reset container scroll to start of chapter (epub.js horizontal mode
+                      // navigates via container.scrollLeft, not iframe.contentWindow).
+                      const mgr3 = (renditionRef.current as any)?.manager;
+                      const epubContainer = mgr3?.container as HTMLElement | null;
+                      if (epubContainer) epubContainer.scrollLeft = 0;
                     }
                   }, 0);
                 });
