@@ -226,6 +226,8 @@ export default function BookReader() {
   const renditionRef = useRef<EpubRendition | null>(null);
   // Tracks the page number at the start of the current chapter (set by 'relocated' event)
   const chapterStartPageRef = useRef(1);
+  // Increments on every 'rendered' event so stale async timers can self-cancel
+  const renderGenRef = useRef(0);
 
   const goPrevRef = useRef<() => void>(() => {});
   const goNextRef = useRef<() => void>(() => {});
@@ -717,6 +719,13 @@ export default function BookReader() {
                   // iOS fix: epub.js sets scrolling="no" which prevents scrollTo() on iOS.
                   iframe.scrolling = 'auto';
 
+                  // Increment generation so any stale 60ms timer from the previous chapter
+                  // can detect it is no longer valid and self-cancel. Without this, a timer
+                  // queued for chapter N fires after chapter N+1 starts loading, expanding
+                  // the new chapter's iframe to the wrong width and causing a black screen.
+                  renderGenRef.current += 1;
+                  const capturedGen = renderGenRef.current;
+
                   const isHorizontal = settingsRef.current.writingMode !== 'vertical';
 
                   if (isHorizontal) {
@@ -733,7 +742,8 @@ export default function BookReader() {
                     //   • goNext: scrollWidth - delta = 0  →  always calls r.next()  →  chapter jump
                     //
                     // Fix: re-inject our style here (last in the cascade, so it wins), then
-                    // force horizontal axis and re-expand the iframe.
+                    // directly set the container to flex (bypassing epub.js's updateAxis which
+                    // can trigger internal resize/re-render cycles causing blank screens).
                     const win = iframe.contentWindow;
                     const doc = win?.document;
                     const mgr = (renditionRef.current as any)?.manager;
@@ -767,10 +777,15 @@ export default function BookReader() {
                       }
                     }
 
-                    // Force horizontal axis so epub-container gets display:flex
-                    if (mgr && mgr.settings?.axis !== 'horizontal') {
-                      if (typeof mgr.updateAxis === 'function') {
-                        mgr.updateAxis('horizontal');
+                    // Force horizontal layout by directly setting container display.
+                    // We avoid epub.js's updateAxis() because it calls resize() internally,
+                    // which can trigger a re-render cycle that produces a blank screen.
+                    // We also update mgr.settings.axis so epub.js internal state stays consistent.
+                    if (mgr) {
+                      if (mgr.settings) mgr.settings.axis = 'horizontal';
+                      if (epubContainer) {
+                        epubContainer.style.display = 'flex';
+                        epubContainer.style.flexDirection = 'row';
                       }
                     }
 
@@ -778,18 +793,16 @@ export default function BookReader() {
                     // immediately after CSS injection returns 353px (one page), but ~50ms later
                     // the multi-column layout settles and returns the correct N×pageWidth value.
                     // We defer expansion to after this settling delay.
-                    // WebKit defers multi-column CSS layout: getBoundingClientRect() at T=0
-                    // returns the single-page width (353px), but after ~50ms the browser
-                    // computes the full multi-column extent (10237px). We wait 60ms then:
-                    //   1. Measure the true textWidth
-                    //   2. Expand epub-view + iframe to N×pageWidth
-                    //   3. Set flex-shrink:0 so the flex container doesn't shrink it back
-                    //   4. container.scrollLeft can then navigate pages (0 → N-1 pages)
+                    //
+                    // We check capturedGen === renderGenRef.current to cancel if a newer
+                    // chapter has already rendered (prevents stale timer corrupting new chapter).
                     const capturedIframe = iframe;
                     const capturedPageW = pageW;
                     window.setTimeout(() => {
+                      // Cancel if a new chapter has been rendered since we were queued
+                      if (capturedGen !== renderGenRef.current) return;
                       const currentDoc = capturedIframe.contentWindow?.document;
-                      if (!currentDoc) return;
+                      if (!currentDoc || !capturedIframe.isConnected) return;
                       const range = currentDoc.createRange();
                       range.selectNodeContents(currentDoc.body);
                       const textW = range.getBoundingClientRect().width;
