@@ -349,6 +349,44 @@ export default function BookReader() {
         rendition.display(cfi);
       }
     } catch { /* ignore on first render */ }
+
+    // After mode switch, fix container/iframe layout for the target mode.
+    // Use 100ms delay to ensure display() and rendered handler have completed.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mgr = (rendition as any).manager;
+    if (mgr) {
+      window.setTimeout(() => {
+        const container = mgr.container as HTMLElement;
+        if (!container) return;
+        const epubView = container.querySelector('.epub-view') as HTMLElement | null;
+        const iframe = epubView?.querySelector('iframe') as HTMLIFrameElement | null;
+        if (!iframe?.contentWindow?.document) return;
+
+        if (settings.writingMode === 'vertical') {
+          // Vertical: expand iframe height to fit content, reset horizontal expansion
+          const textH = iframe.contentWindow.document.documentElement.scrollHeight;
+          const pageH = container.offsetHeight;
+          const pageW = container.offsetWidth;
+
+          if (textH > pageH * 1.5) {
+            const expandedH = Math.ceil(textH / pageH) * pageH;
+            if (epubView) {
+              epubView.style.width = pageW + 'px';
+              epubView.style.height = expandedH + 'px';
+            }
+            iframe.style.width = pageW + 'px';
+            iframe.style.height = expandedH + 'px';
+          }
+          container.style.display = 'block';
+          container.style.overflowY = 'hidden';
+          container.scrollLeft = 0;
+        } else {
+          // Horizontal: ensure flex layout is set (rendered handler handles expansion)
+          container.style.display = 'flex';
+          container.style.flexDirection = 'row';
+        }
+      }, 100);
+    }
   }, [settings.fontSize, settings.lineHeight, settings.themeMode, settings.writingMode, theme]);
 
   const handleToggleBar = useCallback(() => {
@@ -891,16 +929,48 @@ export default function BookReader() {
                       const domContainer = iframeEl.parentElement?.parentElement;
                       if (domContainer) domContainer.style.direction = 'ltr';
                     } else {
-                      // Vertical mode: restore scroll position from saved progress.
-                      // (Horizontal restore is in the 60ms timer above.)
+                      // Vertical mode: expand iframe vertically to fit content.
+                      // In vertical-rl writing mode, content flows vertically and the
+                      // iframe must be tall enough to hold all content. epub.js may
+                      // have left it at viewport height from horizontal mode.
+                      const vDoc = iframeEl.contentWindow?.document;
+                      if (vDoc) {
+                        const textH = vDoc.documentElement.scrollHeight;
+                        const mgr4 = (renditionRef.current as any)?.manager;
+                        const ec = mgr4?.container as HTMLElement | null;
+                        const pageH = ec?.offsetHeight || iframeEl.offsetHeight || 768;
+
+                        if (textH > pageH * 1.5) {
+                          const expandedH = Math.ceil(textH / pageH) * pageH;
+                          const epubViewEl = iframeEl.parentElement as HTMLElement | null;
+                          if (epubViewEl) {
+                            epubViewEl.style.width = '';
+                            epubViewEl.style.height = expandedH + 'px';
+                            epubViewEl.style.flexShrink = '0';
+                          }
+                          iframeEl.style.width = (ec?.offsetWidth || iframeEl.offsetWidth) + 'px';
+                          iframeEl.style.height = expandedH + 'px';
+                        }
+
+                        // Container should use block layout for vertical scrolling
+                        if (ec) {
+                          ec.style.display = 'block';
+                          ec.style.overflowY = 'hidden';
+                        }
+                      }
+
+                      // Restore vertical scroll position from saved progress
                       if (scrollRestoreRef.current !== null) {
                         const frac = scrollRestoreRef.current;
                         scrollRestoreRef.current = null;
-                        const mgr4 = (renditionRef.current as any)?.manager;
-                        const ec = mgr4?.container as HTMLElement | null;
-                        if (ec) {
-                          const maxS = ec.scrollHeight - ec.offsetHeight;
-                          ec.scrollTop = Math.round(frac * maxS);
+                        const mgr5 = (renditionRef.current as any)?.manager;
+                        const ec2 = mgr5?.container as HTMLElement | null;
+                        if (ec2) {
+                          // Need a frame for layout to settle after height change
+                          requestAnimationFrame(() => {
+                            const maxS = ec2.scrollHeight - ec2.offsetHeight;
+                            ec2.scrollTop = Math.round(frac * maxS);
+                          });
                         }
                       }
                     }
