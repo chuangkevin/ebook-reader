@@ -384,9 +384,41 @@ export default function BookReader() {
           container.style.overflowY = 'hidden';
           container.scrollLeft = 0;
         } else {
-          // Horizontal: ensure flex layout is set (rendered handler handles expansion)
+          // Horizontal: reset vertical expansion and re-expand horizontally
           container.style.display = 'flex';
           container.style.flexDirection = 'row';
+          container.style.overflowY = '';
+          container.scrollTop = 0;
+
+          const pageW = container.offsetWidth;
+          const pageH = container.offsetHeight;
+          const doc = iframe.contentWindow.document;
+
+          // Reset iframe to viewport dimensions first
+          iframe.style.height = pageH + 'px';
+          if (epubView) epubView.style.height = pageH + 'px';
+
+          // Force column layout
+          const body = doc.body;
+          body.style.setProperty('padding', '0px', 'important');
+          body.style.setProperty('margin', '0px', 'important');
+          body.style.setProperty('column-width', pageW + 'px', 'important');
+          body.style.setProperty('-webkit-column-width', pageW + 'px', 'important');
+          body.style.setProperty('column-gap', '0px', 'important');
+          body.style.setProperty('-webkit-column-gap', '0px', 'important');
+
+          // Measure and expand horizontally
+          const range = doc.createRange();
+          range.selectNodeContents(body);
+          const textW = range.getBoundingClientRect().width;
+          if (textW > pageW * 1.5) {
+            const expandedW = Math.ceil(textW / pageW) * pageW;
+            if (epubView) {
+              epubView.style.width = expandedW + 'px';
+              epubView.style.flexShrink = '0';
+            }
+            iframe.style.width = expandedW + 'px';
+          }
         }
       }, 100);
     }
