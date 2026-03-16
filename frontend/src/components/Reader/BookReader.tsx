@@ -915,7 +915,13 @@ export default function BookReader() {
                     // which can trigger a re-render cycle that produces a blank screen.
                     // We also update mgr.settings.axis so epub.js internal state stays consistent.
                     if (mgr) {
-                      if (mgr.settings) mgr.settings.axis = 'horizontal';
+                      if (mgr.settings) {
+                        mgr.settings.axis = 'horizontal';
+                        // Force LTR so epub.js scrollBy() doesn't reverse x for RTL books.
+                        // Without this, r.next() at chapter end scrolls backward instead
+                        // of jumping to next chapter (scrollBy multiplies delta by -1 for RTL).
+                        mgr.settings.direction = 'ltr';
+                      }
                       if (epubContainer) {
                         epubContainer.style.display = 'flex';
                         epubContainer.style.flexDirection = 'row';
