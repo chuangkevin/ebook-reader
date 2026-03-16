@@ -42,6 +42,7 @@ export function useProgressSync(userId: string, bookId: string) {
   }, [userId, bookId]);
 
   const save = useCallback((cfi: string | null, percentage: number) => {
+
     pendingRef.current = { cfi, percentage };
 
     if (timerRef.current) {

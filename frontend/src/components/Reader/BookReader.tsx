@@ -228,6 +228,8 @@ export default function BookReader() {
   const chapterStartPageRef = useRef(1);
   // Increments on every 'rendered' event so stale async timers can self-cancel
   const renderGenRef = useRef(0);
+  // Scroll fraction to restore after initial render (from saved progress)
+  const scrollRestoreRef = useRef<number | null>(null);
 
   const goPrevRef = useRef<() => void>(() => {});
   const goNextRef = useRef<() => void>(() => {});
@@ -262,8 +264,17 @@ export default function BookReader() {
 
         setBook(bookData);
         if (progressData.cfi) {
-          setLocation(progressData.cfi);
-          locationRef.current = progressData.cfi;
+          // Parse out scroll fraction if present (format: "epubcfi(...)@@0.3500")
+          const rawCfi = progressData.cfi;
+          const scrollMatch = rawCfi.match(/@@([\d.]+)$/);
+          const pureCfi = rawCfi.replace(/@@[\d.]+$/, '');
+
+          setLocation(pureCfi);
+          locationRef.current = rawCfi; // Keep full string with scroll info
+          if (scrollMatch) {
+            // Store scroll fraction to apply after rendition renders
+            scrollRestoreRef.current = parseFloat(scrollMatch[1]);
+          }
         }
         if (progressData.percentage) {
           setPercentage(progressData.percentage);
@@ -344,9 +355,8 @@ export default function BookReader() {
     setShowBar(prev => !prev);
   }, []);
 
-  // After silent scrolling within a chapter, update the page number display only.
-  // Percentage is NOT updated here — it is managed exclusively by the 'relocated'
-  // event which uses epub.js CFI-based locations (accurate character-level positions).
+  // After silent scrolling within a chapter, update the page number display
+  // and persist the current CFI so progress is saved at the exact scroll position.
   const updatePageAfterScroll = useCallback(() => {
     const r = renditionRef.current;
     if (!r) return;
@@ -376,7 +386,28 @@ export default function BookReader() {
       const estPage = chapterStartPageRef.current + pagesScrolled;
       setCurrentPage(Math.min(estPage, totalPages));
     }
-  }, [totalPages]);
+
+    // Save the current scroll fraction alongside the CFI.
+    // epub.js's currentLocation() is unreliable after our custom iframe expansion
+    // (always returns the same CFI regardless of scroll position), so we encode
+    // the scroll fraction in the cfi field as "epubcfi(...)@@0.3500".
+    // On restore, we parse out the fraction and apply it after display().
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mgr2 = (r as any).manager;
+    if (mgr2) {
+      const c = mgr2.container as HTMLElement;
+      const isVert2 = settingsRef.current.writingMode === 'vertical';
+      const scrollPos = isVert2 ? c.scrollTop : c.scrollLeft;
+      const scrollMax = isVert2
+        ? c.scrollHeight - c.offsetHeight
+        : c.scrollWidth - c.offsetWidth;
+      const scrollFraction = scrollMax > 0 ? scrollPos / scrollMax : 0;
+      const baseCfi = (locationRef.current || '').replace(/@@[\d.]+$/, '');
+      const cfiWithScroll = `${baseCfi}@@${scrollFraction.toFixed(4)}`;
+      locationRef.current = cfiWithScroll;
+      save(cfiWithScroll, percentageRef.current);
+    }
+  }, [totalPages, save]);
 
   // Horizontal mode: navigate by scrolling the iframe's contentWindow (not the outer
   // container). epub.js lays content into horizontal columns inside the iframe; we scroll
@@ -451,6 +482,7 @@ export default function BookReader() {
         const delta = container.offsetWidth;
         const scrollLeft = container.scrollLeft;
         const maxScroll = container.scrollWidth - container.offsetWidth;
+
         if (scrollLeft < maxScroll - 2) {
           container.scrollLeft += delta;
           updatePageAfterScroll();
@@ -514,9 +546,11 @@ export default function BookReader() {
 
   // --- EPUB handlers ---
   const handleEpubLocationChanged = useCallback((newCfi: string) => {
+
     setLocation(newCfi);
-    locationRef.current = newCfi;
-    save(newCfi, percentageRef.current);
+    // On chapter change, scroll is at 0 → fraction is 0
+    locationRef.current = `${newCfi}@@0.0000`;
+    save(`${newCfi}@@0.0000`, percentageRef.current);
   }, [save]);
 
   const handleTocSelect = useCallback((href: string) => {
@@ -832,6 +866,20 @@ export default function BookReader() {
                         }
                         capturedIframe.style.width = expandedW + 'px';
                       }
+
+                      // Restore scroll position from saved progress (if any).
+                      // Must happen AFTER expansion so scrollWidth is correct.
+                      if (scrollRestoreRef.current !== null) {
+                        const frac = scrollRestoreRef.current;
+                        scrollRestoreRef.current = null; // Only restore once
+                        const mgr4 = (renditionRef.current as any)?.manager;
+                        const ec = mgr4?.container as HTMLElement | null;
+                        if (ec) {
+                          const maxS = ec.scrollWidth - ec.offsetWidth;
+                          ec.scrollLeft = Math.round(frac * maxS);
+  
+                        }
+                      }
                     }, 60);
                   }
 
@@ -844,11 +892,9 @@ export default function BookReader() {
                       const domContainer = iframeEl.parentElement?.parentElement;
                       if (domContainer) domContainer.style.direction = 'ltr';
 
-                      // Reset container scroll to start of chapter (epub.js horizontal mode
-                      // navigates via container.scrollLeft, not iframe.contentWindow).
-                      const mgr3 = (renditionRef.current as any)?.manager;
-                      const epubContainer = mgr3?.container as HTMLElement | null;
-                      if (epubContainer) epubContainer.scrollLeft = 0;
+                      // Do NOT reset scrollLeft here — epub.js's display(cfi) may have
+                      // already positioned the container to restore a saved reading position.
+                      // Resetting to 0 would destroy that positioning.
                     }
                   }, 0);
                 });
@@ -862,7 +908,24 @@ export default function BookReader() {
                   const pct = Math.round(loc.start.percentage * 10000) / 100;
                   setPercentage(pct);
                   percentageRef.current = pct;
-                  save(locationRef.current, pct);
+                  // Save CFI with scroll fraction so progress restore works.
+                  // relocated fires both on chapter jumps (scrollLeft=0) and on
+                  // scroll events within a chapter. We always include the current
+                  // scroll fraction to preserve the exact reading position.
+                  const mgr5 = (renditionRef.current as any)?.manager;
+                  const rc = mgr5?.container as HTMLElement | null;
+                  let cfiToSave = loc.start.cfi;
+                  if (rc) {
+                    const isV = settingsRef.current.writingMode === 'vertical';
+                    const sp = isV ? rc.scrollTop : rc.scrollLeft;
+                    const sm = isV
+                      ? rc.scrollHeight - rc.offsetHeight
+                      : rc.scrollWidth - rc.offsetWidth;
+                    const sf = sm > 0 ? sp / sm : 0;
+                    cfiToSave = `${loc.start.cfi}@@${sf.toFixed(4)}`;
+                  }
+                  locationRef.current = cfiToSave;
+                  save(cfiToSave, pct);
 
                   try {
                     const page = r.book.locations.locationFromCfi(loc.start.cfi);
