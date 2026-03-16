@@ -425,7 +425,12 @@ export default function BookReader() {
 
     if (totalPages > 0) {
       const estPage = chapterStartPageRef.current + pagesScrolled;
-      setCurrentPage(Math.min(estPage, totalPages));
+      const clampedPage = Math.min(estPage, totalPages);
+      setCurrentPage(clampedPage);
+      // Estimate percentage from page position
+      const estPct = Math.round((clampedPage / totalPages) * 10000) / 100;
+      setPercentage(estPct);
+      percentageRef.current = estPct;
     }
 
     // Save the current scroll fraction alongside the CFI.
@@ -1019,9 +1024,14 @@ export default function BookReader() {
                 }).catch(() => {});
 
                 rendition.on('relocated', (loc: { start: { percentage: number; cfi: string } }) => {
+                  // Only update percentage from relocated if it's non-zero and meaningful.
+                  // Our custom paging makes epub.js's percentage unreliable (often 0),
+                  // so we prefer the page-based estimate from updatePageAfterScroll.
                   const pct = Math.round(loc.start.percentage * 10000) / 100;
-                  setPercentage(pct);
-                  percentageRef.current = pct;
+                  if (pct > 0) {
+                    setPercentage(pct);
+                    percentageRef.current = pct;
+                  }
                   // Save CFI with scroll fraction so progress restore works.
                   // relocated fires both on chapter jumps (scrollLeft=0) and on
                   // scroll events within a chapter. We always include the current
@@ -1147,6 +1157,47 @@ export default function BookReader() {
             handPreference={settings.handPreference}
             invert={settings.invertPageTurn}
           />
+        )}
+
+        {/* Bottom progress bar — always visible */}
+        {book?.format === 'epub' && (
+          <Box
+            sx={{
+              position: 'absolute', bottom: 0, left: 0, right: 0,
+              pointerEvents: 'none', zIndex: 10,
+            }}
+          >
+            {/* Progress bar */}
+            <Box sx={{
+              height: 3,
+              background: `${theme.fg}22`,
+            }}>
+              <Box sx={{
+                height: '100%',
+                width: `${percentage}%`,
+                background: theme.fg,
+                opacity: 0.5,
+                transition: 'width 0.3s ease',
+              }} />
+            </Box>
+            {/* Page indicator */}
+            <Box sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              py: 0.3,
+              background: `${theme.bg}cc`,
+            }}>
+              <Typography variant="caption" sx={{
+                color: theme.fg,
+                opacity: 0.6,
+                fontSize: '11px',
+                fontFamily: 'monospace',
+              }}>
+                {totalPages > 0 && `${currentPage} / ${totalPages}  ·  `}
+                {percentage.toFixed(1)}%
+              </Typography>
+            </Box>
+          </Box>
         )}
       </Box>
 
