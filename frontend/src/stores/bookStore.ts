@@ -6,7 +6,7 @@ interface BookState {
   currentBook: Book | null
   setBooks: (books: Book[]) => void
   setCurrentBook: (book: Book | null) => void
-  updateBookProgress: (bookId: number, progress: string) => void
+  updateBookProgress: (bookId: string, progress: string) => void
 }
 
 export const useBookStore = create<BookState>()((set) => ({

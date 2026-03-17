@@ -16,7 +16,7 @@ import type { ReaderSettings as ReaderSettingsType } from '../../types/index'
 interface ReaderSettingsProps {
   open: boolean
   onClose: () => void
-  userId: number
+  userId: string
 }
 
 export default function ReaderSettings({ open, onClose, userId }: ReaderSettingsProps) {

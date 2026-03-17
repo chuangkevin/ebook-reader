@@ -15,8 +15,8 @@ export interface TxtReaderHandle {
 }
 
 interface TxtReaderProps {
-  bookId: number
-  userId: number
+  bookId: string
+  userId: string
   initialProgress?: string
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number

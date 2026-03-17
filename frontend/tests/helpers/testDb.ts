@@ -11,13 +11,13 @@ import path from 'path'
 const API_BASE = 'http://localhost:3003/api'
 
 export interface TestUser {
-  id: number
+  id: string
   name: string
   avatar: string | null
 }
 
 export interface TestBook {
-  id: number
+  id: string
   title: string
   author: string
   format: string
@@ -41,7 +41,7 @@ export async function createUser(name: string): Promise<TestUser> {
   return res.json() as Promise<TestUser>
 }
 
-export async function deleteUser(id: number): Promise<void> {
+export async function deleteUser(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/users/${id}`, { method: 'DELETE' })
   // 404 means already gone – that's fine during cleanup
   if (!res.ok && res.status !== 404) {
@@ -118,7 +118,7 @@ export async function cleanupBookByTitle(title: string): Promise<void> {
   }
 }
 
-export async function deleteBook(id: number): Promise<void> {
+export async function deleteBook(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/books/${id}`, { method: 'DELETE' })
   if (!res.ok && res.status !== 404) {
     throw new Error(`deleteBook(${id}) failed (${res.status})`)

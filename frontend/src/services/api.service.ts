@@ -26,16 +26,16 @@ async function createUser(name: string): Promise<User> {
   })
 }
 
-async function removeUser(id: number): Promise<void> {
+async function removeUser(id: string): Promise<void> {
   return request<void>(`/users/${id}`, { method: 'DELETE' })
 }
 
 // Books
-async function listBooks(_userId: number): Promise<Book[]> {
+async function listBooks(_userId: string): Promise<Book[]> {
   return request<Book[]>('/books')
 }
 
-async function uploadBook(file: File, userId: number): Promise<Book> {
+async function uploadBook(file: File, userId: string): Promise<Book> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('uploadedBy', String(userId))
@@ -45,24 +45,39 @@ async function uploadBook(file: File, userId: number): Promise<Book> {
   })
 }
 
-async function removeBook(bookId: number): Promise<void> {
+async function removeBook(bookId: string): Promise<void> {
   return request<void>(`/books/${bookId}`, { method: 'DELETE' })
 }
 
-async function updateProgress(userId: number, bookId: number, progress: string): Promise<void> {
+async function updateProgress(userId: string, bookId: string, progress: string, format: string): Promise<void> {
+  // Parse progress string to cfi + percentage
+  // EPUB: @@chapterIndex@@scrollFraction  -> percentage = scrollFraction * 100
+  // PDF:  @@page@@totalPages              -> percentage = page/total * 100
+  // TXT:  @@scrollFraction@@1             -> percentage = scrollFraction * 100
+  const parts = progress.split('@@').filter(Boolean)
+  let percentage = 0
+  if (parts.length >= 2) {
+    const first = parseFloat(parts[0])
+    const second = parseFloat(parts[1])
+    if (format === 'pdf' && second > 0) {
+      percentage = Math.round((first / second) * 100)
+    } else {
+      percentage = Math.round(second * 100)
+    }
+  }
   return request<void>(`/users/${userId}/books/${bookId}/progress`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ progress }),
+    body: JSON.stringify({ cfi: progress, percentage }),
   })
 }
 
 // Settings
-async function getSettings(userId: number): Promise<ReaderSettings> {
+async function getSettings(userId: string): Promise<ReaderSettings> {
   return request<ReaderSettings>(`/users/${userId}/settings`)
 }
 
-async function updateSettings(userId: number, settings: ReaderSettings): Promise<void> {
+async function updateSettings(userId: string, settings: ReaderSettings): Promise<void> {
   return request<void>(`/users/${userId}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

@@ -102,7 +102,7 @@ export default function ReaderPage() {
 
       // Update store + persist
       updateBookProgress(currentBook.id, progress)
-      api.books.updateProgress(currentUser.id, currentBook.id, progress).catch(() => {
+      api.books.updateProgress(currentUser.id, currentBook.id, progress, currentBook.format).catch(() => {
         // Progress save failed silently
       })
     },
@@ -111,7 +111,7 @@ export default function ReaderPage() {
 
   if (!currentBook || !currentUser) return null
 
-  const bookIdNum = parseInt(bookId ?? '0', 10)
+  const bookIdStr = bookId ?? ''
   const format = currentBook.format
 
   return (
@@ -185,7 +185,7 @@ export default function ReaderPage() {
         {format === 'epub' && (
           <EpubReader
             ref={readerRef as React.Ref<EpubReaderHandle>}
-            bookId={bookIdNum}
+            bookId={bookIdStr}
             userId={currentUser.id}
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}
@@ -200,7 +200,7 @@ export default function ReaderPage() {
         {format === 'pdf' && (
           <PdfReader
             ref={readerRef as React.Ref<PdfReaderHandle>}
-            bookId={bookIdNum}
+            bookId={bookIdStr}
             userId={currentUser.id}
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}
@@ -213,7 +213,7 @@ export default function ReaderPage() {
         {format === 'txt' && (
           <TxtReader
             ref={readerRef as React.Ref<TxtReaderHandle>}
-            bookId={bookIdNum}
+            bookId={bookIdStr}
             userId={currentUser.id}
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}

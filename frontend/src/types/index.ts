@@ -1,11 +1,11 @@
 export interface User {
-  id: number
+  id: string
   name: string
   avatar?: string
 }
 
 export interface Book {
-  id: number
+  id: string
   title: string
   author: string
   format: 'epub' | 'pdf' | 'txt'
