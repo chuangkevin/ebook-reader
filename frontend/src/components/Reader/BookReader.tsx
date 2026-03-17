@@ -800,7 +800,12 @@ export default function BookReader() {
                   const wm = settingsRef.current.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb';
                   const wmStyle = doc.createElement('style');
                   wmStyle.id = '__reader-writing-mode';
-                  wmStyle.textContent = `html, body { writing-mode: ${wm} !important; -webkit-writing-mode: ${wm} !important; }`;
+                  // For vertical mode, add padding via stylesheet rule (author !important beats
+                  // epub.js non-important inline style, so this reliably adds breathing room).
+                  const paddingRule = settingsRef.current.writingMode === 'vertical'
+                    ? ' body { padding: 0 32px !important; margin: 0 !important; }'
+                    : '';
+                  wmStyle.textContent = `html, body { writing-mode: ${wm} !important; -webkit-writing-mode: ${wm} !important; }${paddingRule}`;
                   doc.head.appendChild(wmStyle);
                   // 1) Scrollbar hiding (no overflow:hidden on body!)
                   const scrollStyle = doc.createElement('style');
@@ -919,7 +924,11 @@ export default function BookReader() {
                       if (wmStyle) wmStyle.remove();
                       wmStyle = doc.createElement('style') as HTMLStyleElement;
                       wmStyle.id = '__reader-writing-mode';
-                      wmStyle.textContent = `html, body { writing-mode: horizontal-tb !important; -webkit-writing-mode: horizontal-tb !important; } body { column-width: ${pageW}px !important; -webkit-column-width: ${pageW}px !important; column-gap: 0px !important; padding: 0px !important; margin: 0px !important; }`;
+                      // PADDING_LR: horizontal padding added to each side of body.
+                      // column-width is reduced accordingly so each column fills
+                      // exactly (pageW - 2*PADDING_LR) of the visual reading area.
+                      const PADDING_LR = 16;
+                      wmStyle.textContent = `html, body { writing-mode: horizontal-tb !important; -webkit-writing-mode: horizontal-tb !important; } body { column-width: ${pageW - 2 * PADDING_LR}px !important; -webkit-column-width: ${pageW - 2 * PADDING_LR}px !important; column-gap: 0px !important; padding: 0 ${PADDING_LR}px !important; margin: 0px !important; }`;
                       doc.head.appendChild(wmStyle);
 
                       // Critical: epub.js may have expanded the iframe VERTICALLY (height=17134px)
@@ -971,11 +980,13 @@ export default function BookReader() {
                       // Inline !important wins over all author stylesheets.
                       // We must set these BEFORE measuring textWidth so getBoundingClientRect
                       // reflects the correct column layout (no padding shrinking content area).
+                      const PADDING_LR2 = 16;
+                      const columnW = capturedPageW - 2 * PADDING_LR2;
                       const body = currentDoc.body;
-                      body.style.setProperty('padding', '0px', 'important');
+                      body.style.setProperty('padding', `0 ${PADDING_LR2}px`, 'important');
                       body.style.setProperty('margin', '0px', 'important');
-                      body.style.setProperty('column-width', capturedPageW + 'px', 'important');
-                      body.style.setProperty('-webkit-column-width', capturedPageW + 'px', 'important');
+                      body.style.setProperty('column-width', columnW + 'px', 'important');
+                      body.style.setProperty('-webkit-column-width', columnW + 'px', 'important');
                       body.style.setProperty('column-gap', '0px', 'important');
                       body.style.setProperty('-webkit-column-gap', '0px', 'important');
 
@@ -984,8 +995,11 @@ export default function BookReader() {
                       const range = currentDoc.createRange();
                       range.selectNodeContents(body);
                       const textW = range.getBoundingClientRect().width;
-                      if (textW > capturedPageW * 1.5) {
-                        const expandedW = Math.ceil(textW / capturedPageW) * capturedPageW;
+                      // Use columnW (not capturedPageW) so the number of columns
+                      // is calculated correctly with the horizontal padding applied.
+                      if (textW > columnW * 1.5) {
+                        const numCols = Math.ceil(textW / columnW);
+                        const expandedW = numCols * capturedPageW;
                         const epubViewEl = capturedIframe.parentElement as HTMLElement | null;
                         if (epubViewEl) {
                           epubViewEl.style.width = expandedW + 'px';
@@ -1036,6 +1050,13 @@ export default function BookReader() {
                       // have left it at viewport height from horizontal mode.
                       const vDoc = iframeEl.contentWindow?.document;
                       if (vDoc) {
+                        // Remove horizontal-mode column properties so vertical-rl
+                        // layout is not constrained by leftover column-width rules.
+                        vDoc.body.style.removeProperty('column-width');
+                        vDoc.body.style.removeProperty('-webkit-column-width');
+                        vDoc.body.style.removeProperty('column-gap');
+                        vDoc.body.style.removeProperty('-webkit-column-gap');
+                        vDoc.body.style.setProperty('margin', '0px', 'important');
                         const textH = vDoc.documentElement.scrollHeight;
                         const mgr4 = (renditionRef.current as any)?.manager;
                         const ec = mgr4?.container as HTMLElement | null;
@@ -1093,11 +1114,13 @@ export default function BookReader() {
                 }).catch(() => {});
 
                 rendition.on('relocated', (loc: { start: { percentage: number; cfi: string } }) => {
-                  // Only update percentage from relocated if it's non-zero and meaningful.
-                  // Our custom paging makes epub.js's percentage unreliable (often 0),
-                  // so we prefer the page-based estimate from updatePageAfterScroll.
+                  // Only update percentage from relocated if locations are generated.
+                  // Before locations.generate() completes, epub.js reports incorrect
+                  // percentage for RTL/CJK books (e.g., 100% at the beginning of book
+                  // because spine indices are reversed for RTL spines). After locations
+                  // are generated (total > 0), the value is accurate.
                   const pct = Math.round(loc.start.percentage * 10000) / 100;
-                  if (pct > 0) {
+                  if (pct > 0 && r.book.locations.total > 0) {
                     setPercentage(pct);
                     percentageRef.current = pct;
                   }
