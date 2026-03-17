@@ -92,6 +92,18 @@ export function initDatabase(): void {
     )
   `);
 
+  // User settings table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id TEXT PRIMARY KEY,
+      writing_mode TEXT NOT NULL DEFAULT 'vertical-rl',
+      font_size INTEGER NOT NULL DEFAULT 18,
+      theme TEXT NOT NULL DEFAULT 'light',
+      opencc_mode TEXT NOT NULL DEFAULT 'none',
+      tap_zone_layout TEXT NOT NULL DEFAULT 'default'
+    )
+  `);
+
   // Indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_reading_progress_user ON reading_progress(user_id);
