@@ -175,6 +175,7 @@ export default function ReaderPage() {
           initialProgress={currentBook.progress}
           writingMode={settings.writingMode}
           fontSize={settings.fontSize}
+          tapZoneLayout={settings.tapZoneLayout}
           onProgressChange={handleProgressChange}
           onTocLoad={setToc}
         />

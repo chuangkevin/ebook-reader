@@ -44,7 +44,7 @@
 - [x] 6.2 實作鍵盤翻頁：ArrowLeft/Right/Up/Down、PageUp/Down、Space
 - [x] 6.3 實作滑動手勢翻頁（touch swipe）
 - [x] 6.4 防誤觸：翻頁區域禁用 user-select
-- [ ] 6.5 實作翻頁區域配置（預設/左手/右手）
+- [x] 6.5 實作翻頁區域配置（預設/左手/右手）
 
 ## 7. 閱讀進度
 

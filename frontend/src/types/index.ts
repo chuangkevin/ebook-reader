@@ -24,6 +24,7 @@ export interface ReaderSettings {
   fontSize: number  // px, default 18
   theme: 'light' | 'sepia' | 'dark'
   openccMode: 'none' | 'tw2s' | 's2tw'
+  tapZoneLayout: 'default' | 'bottom-next' | 'bottom-prev'
 }
 
 export interface TocItem {

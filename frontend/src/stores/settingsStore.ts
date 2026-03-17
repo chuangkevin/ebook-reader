@@ -11,6 +11,7 @@ const defaultSettings: ReaderSettings = {
   fontSize: 18,
   theme: 'light',
   openccMode: 'none',
+  tapZoneLayout: 'default',
 }
 
 export const useSettingsStore = create<SettingsState>()((set) => ({

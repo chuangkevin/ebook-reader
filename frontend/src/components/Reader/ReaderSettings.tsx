@@ -72,6 +72,13 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
     scheduleSave(updated)
   }
 
+  function handleTapZone(_: React.MouseEvent, value: ReaderSettingsType['tapZoneLayout'] | null) {
+    if (!value) return
+    const updated = { ...settings, tapZoneLayout: value }
+    setSettings({ tapZoneLayout: value })
+    scheduleSave(updated)
+  }
+
   return (
     <Drawer
       anchor="bottom"
@@ -146,7 +153,7 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
       </Box>
 
       {/* 簡繁轉換 */}
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 3 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
           簡繁轉換
         </Typography>
@@ -160,6 +167,30 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
           <ToggleButton value="tw2s">繁→簡</ToggleButton>
           <ToggleButton value="s2tw">簡→繁</ToggleButton>
         </ToggleButtonGroup>
+      </Box>
+
+      {/* 翻頁區域配置 */}
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+          翻頁區域
+        </Typography>
+        <ToggleButtonGroup
+          value={settings.tapZoneLayout}
+          exclusive
+          onChange={handleTapZone}
+          size="small"
+        >
+          <ToggleButton value="default">左右</ToggleButton>
+          <ToggleButton value="bottom-next">下頁</ToggleButton>
+          <ToggleButton value="bottom-prev">上頁</ToggleButton>
+        </ToggleButtonGroup>
+        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+          {settings.tapZoneLayout === 'default'
+            ? '左側＝上一頁，右側＝下一頁'
+            : settings.tapZoneLayout === 'bottom-next'
+            ? '上半＝上一頁，下半＝下一頁'
+            : '上半＝下一頁，下半＝上一頁'}
+        </Typography>
       </Box>
     </Drawer>
   )

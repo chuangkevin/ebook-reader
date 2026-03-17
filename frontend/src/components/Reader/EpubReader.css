@@ -1,0 +1,49 @@
+.epub-reader-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.epub-paginator {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.epub-tap-zone {
+  position: absolute;
+  z-index: 10;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Default layout: left/right 30% strips */
+.epub-tap-left {
+  left: 0;
+  top: 0;
+  width: 30%;
+  height: 100%;
+}
+
+.epub-tap-right {
+  right: 0;
+  top: 0;
+  width: 30%;
+  height: 100%;
+}
+
+/* One-hand layout: top/bottom halves */
+.epub-tap-top {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 50%;
+}
+
+.epub-tap-bottom {
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 50%;
+}

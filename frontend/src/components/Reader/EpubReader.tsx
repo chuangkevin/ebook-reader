@@ -5,6 +5,8 @@ import {
   useRef,
 } from 'react'
 
+import './EpubReader.css'
+
 // Register the foliate-paginator custom element
 // @ts-ignore
 import '../../lib/foliate-js/paginator.js'
@@ -29,6 +31,7 @@ interface EpubReaderProps {
   initialProgress?: string
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number
+  tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
   onProgressChange: (progress: string) => void
   onTocLoad?: (toc: any[]) => void
 }
@@ -52,7 +55,7 @@ function parseProgress(progress?: string): { chapterIndex: number; scrollFractio
 }
 
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, onProgressChange, onTocLoad }, ref) => {
+  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onProgressChange, onTocLoad }, ref) => {
     const paginatorRef = useRef<HTMLElement>(null)
     // Keep latest values accessible in event listeners without re-running effect
     const writingModeRef = useRef(writingMode)
@@ -167,40 +170,34 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       },
     }))
 
-    return (
-      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-        {/* Left tap zone */}
-        <div
-          onClick={() => (paginatorRef.current as any)?.prev?.()}
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: '30%',
-            height: '100%',
-            zIndex: 10,
-            cursor: 'pointer',
-          }}
-        />
+    const paginatorEl = paginatorRef.current as any
+    const onNext = () => paginatorEl?.next?.()
+    const onPrev = () => paginatorEl?.prev?.()
 
-        {/* Right tap zone */}
-        <div
-          onClick={() => (paginatorRef.current as any)?.next?.()}
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 0,
-            width: '30%',
-            height: '100%',
-            zIndex: 10,
-            cursor: 'pointer',
-          }}
-        />
+    return (
+      <div className="epub-reader-root">
+        {tapZoneLayout === 'default' ? (
+          <>
+            <div className="epub-tap-zone epub-tap-left" onClick={onPrev} />
+            <div className="epub-tap-zone epub-tap-right" onClick={onNext} />
+          </>
+        ) : (
+          <>
+            <div
+              className="epub-tap-zone epub-tap-top"
+              onClick={tapZoneLayout === 'bottom-next' ? onPrev : onNext}
+            />
+            <div
+              className="epub-tap-zone epub-tap-bottom"
+              onClick={tapZoneLayout === 'bottom-next' ? onNext : onPrev}
+            />
+          </>
+        )}
 
         {/* @ts-ignore custom element */}
         <foliate-paginator
           ref={paginatorRef}
-          style={{ display: 'block', width: '100%', height: '100%' }}
+          className="epub-paginator"
         />
       </div>
     )
