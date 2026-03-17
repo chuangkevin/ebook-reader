@@ -72,5 +72,5 @@
 - [ ] 10.1 iPhone iOS Safari 真機測試：直排翻頁、橫排翻頁、進度恢復
 - [ ] 10.2 Android Chrome 測試：所有功能
 - [ ] 10.3 Boox Go Color 7 測試：實體按鈕翻頁
-- [ ] 10.4 更新 GitHub Actions CI/CD workflow（docker build & push）
+- [x] 10.4 更新 GitHub Actions CI/CD workflow（docker build & push）
 - [ ] 10.5 確認 Docker Compose 完整部署（frontend + backend）
