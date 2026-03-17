@@ -1,75 +1,98 @@
 # ebook-reader
 
-跨裝置同步的電子書閱讀平台，支援多使用者、多格式，像 Netflix 一樣選擇使用者後即可繼續閱讀。
+跨裝置同步的電子書閱讀平台。多人共用一台伺服器，各自選擇使用者後即可繼續閱讀，像 Netflix 的使用者切換體驗。
 
-## 功能特色
+---
 
-- **多使用者管理** — 建立不同使用者，各自擁有閱讀進度與書籤
-- **跨裝置同步** — 在任何裝置上選擇使用者，接續上次閱讀位置
-- **多格式支援** — EPUB、PDF、TXT
-- **閱讀設定**
-  - 主題切換（亮色 / 護眼 / 暗色）
-  - 字體大小、行距調整
-  - 橫排 / 直排排版（直排支援傳統中文閱讀方向）
-  - 翻頁區域配置（預設 / 左手 / 右手友善）
-  - 簡體轉繁體
-- **多種翻頁方式**
-  - 點擊螢幕左右區域翻頁
-  - 行動裝置滑動翻頁
-  - 鍵盤方向鍵 / PageUp / PageDown / Space
-  - Boox Go Color 7 實體按鈕支援
-  - 音量鍵翻頁（Android / Boox 裝置）
-- **文字選取禁用** — 閱讀模式下防止誤觸進入複製模式
+## 核心需求
 
-## 技術架構
+### 使用者管理
+- 首頁列出所有使用者，點選後進入書庫（不需密碼）
+- 每位使用者各自擁有閱讀進度、書籤、閱讀設定
+- 支援新增 / 刪除使用者
 
-| 層級 | 技術 |
-| ---- | --- |
-| Frontend | React 18 + TypeScript + Vite + Redux Toolkit + MUI |
-| Backend | Node.js + Express + TypeScript + better-sqlite3 |
-| EPUB 渲染 | react-reader (epub.js) |
-| PDF 渲染 | react-pdf (pdfjs-dist) |
-| 中文轉換 | opencc-js |
-| 部署 | Docker + Docker Compose + GitHub Actions CI/CD |
+### 書庫
+- 上傳電子書（EPUB、PDF、TXT）
+- 書庫列表顯示書封、書名、作者、閱讀進度百分比
+- 繼續閱讀：自動跳回上次離開的位置
 
-## 本地開發
+### 閱讀器核心行為
 
-```bash
-# Frontend
-cd frontend && npm install && npm run dev
+#### 翻頁
+- 點擊螢幕右側 → 下一頁；左側 → 上一頁
+- 滑動手勢（行動裝置）
+- 鍵盤：方向鍵、PageUp/PageDown、Space
+- 硬體按鈕：Boox 實體鍵、音量鍵（Android/Boox）
+- 翻到章節最後一頁再往前 → 自動跳下一章；第一頁往後 → 跳上一章
 
-# Backend
-cd backend && npm install && npm run dev
-```
+#### 進度儲存與恢復
+- 每次翻頁自動儲存目前位置
+- 下次開書從同一位置繼續（精確到頁內捲動位置）
+- 底部常駐顯示進度條與百分比
 
-Frontend: `http://localhost:5173`
-Backend API: `http://localhost:3003`
+#### 目錄（TOC）
+- 顯示章節列表，點選直接跳章
 
-## Docker 部署
+### 排版模式
 
-```bash
-docker compose up -d
-```
+#### 橫排（horizontal）
+- 標準左→右閱讀，由上至下
+- 每次翻頁移動一個螢幕寬度（分頁式，非捲動）
+- 頁面兩側留適當邊距
 
-## 專案結構
+#### 直排（vertical-rl）
+- 傳統中文直排：右→左閱讀，由上至下
+- 每次翻頁移動一個螢幕高度（分頁式，非捲動）
+- 頁面兩側留適當邊距
 
-```text
-ebook-reader/
-├── frontend/          # React SPA
-│   └── src/
-│       ├── components/
-│       │   ├── Reader/       # BookReader, PdfReader, TxtReader, ReaderSettings
-│       │   ├── Library/      # 書庫管理
-│       │   └── UserSelection/ # 使用者選擇
-│       ├── store/            # Redux (user, books, settings)
-│       ├── hooks/            # useProgressSync
-│       ├── services/         # API service
-│       └── utils/            # navigation, readerThemes
-├── backend/           # Express API
-│   └── src/
-│       ├── controllers/      # user, book, progress, bookmark
-│       ├── services/         # 業務邏輯
-│       └── config/           # 環境設定、資料庫
-├── docker-compose.yml
-└── .github/workflows/ # CI/CD
-```
+### 閱讀設定（可即時套用，不需重新開書）
+- 排版切換：橫排 ↔ 直排
+- 字體大小調整
+- 行距調整
+- 主題：亮色 / 護眼（暖黃）/ 暗色
+- 簡體轉繁體
+- 翻頁區域配置：預設 / 左手模式(分為上下半部，可上下頁) / 右手模式(分為上下半部，可上下頁)
+- 可以交換上下頁按鈕對調
+- 每個裝置、每個使用者的設定獨立儲存
+
+### 文字選取
+- 閱讀模式下禁用文字選取，防止誤觸
+
+---
+
+## 目標裝置
+
+| 優先級 | 裝置 / 瀏覽器 |
+|--------|--------------|
+| 最高   | iPhone（iOS Safari）|
+| 高     | Android（Chrome）|
+| 高     | Boox Go Color 7（Android WebView）|
+| 中     | 桌面瀏覽器（Chrome、Firefox、Safari）|
+
+---
+
+## 非功能需求
+
+- 自架伺服器部署（Docker Compose）
+- 書籍檔案與進度儲存於本地，不依賴第三方服務
+- 多人同時使用同一伺服器，進度互相獨立
+- 無網路時書庫仍可瀏覽（已快取章節）
+
+---
+
+## 已知難點（給重建參考）
+
+- **直排 + iOS WebKit**：WebKit 的 CSS columns 在 `vertical-rl` 模式下佈局時序不穩定，需特別處理
+- **進度精確度**：EPUB 的位置標記在不同排版模式下需要對應到正確的捲動位置
+- **模式切換**：橫排 ↔ 直排切換時，需正確清除前一模式的樣式殘留，再套用新模式
+- **章節邊界翻頁**：跨章節時需區分「章節內最後一頁」與「已到達章節末尾」兩種狀態
+
+---
+
+## 參考影片
+
+`reference/` 目錄下有實機操作錄影，可用於確認預期行為。
+
+## 測試
+- 需要進行前後端的單元測試
+- 需要使用playwright進行開發人員可視的整合測試，模擬實際使用情境
