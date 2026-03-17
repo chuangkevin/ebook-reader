@@ -31,14 +31,14 @@ async function removeUser(id: number): Promise<void> {
 }
 
 // Books
-async function listBooks(userId: number): Promise<Book[]> {
-  return request<Book[]>(`/users/${userId}/books`)
+async function listBooks(_userId: number): Promise<Book[]> {
+  return request<Book[]>('/books')
 }
 
 async function uploadBook(file: File, userId: number): Promise<Book> {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('userId', String(userId))
+  formData.append('uploadedBy', String(userId))
   return request<Book>('/books', {
     method: 'POST',
     body: formData,
