@@ -20,6 +20,7 @@ declare global {
 export interface EpubReaderHandle {
   next: () => Promise<void>
   prev: () => Promise<void>
+  goTo: (href: string) => Promise<void>
 }
 
 interface EpubReaderProps {
@@ -29,6 +30,7 @@ interface EpubReaderProps {
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number
   onProgressChange: (progress: string) => void
+  onTocLoad?: (toc: any[]) => void
 }
 
 function injectWritingMode(doc: Document, writingMode: string, fontSize: number) {
@@ -50,7 +52,7 @@ function parseProgress(progress?: string): { chapterIndex: number; scrollFractio
 }
 
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, onProgressChange }, ref) => {
+  ({ bookId, initialProgress, writingMode, fontSize, onProgressChange, onTocLoad }, ref) => {
     const paginatorRef = useRef<HTMLElement>(null)
     // Keep latest values accessible in event listeners without re-running effect
     const writingModeRef = useRef(writingMode)
@@ -95,6 +97,8 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
 
           const book = await makeBook(file)
           if (destroyed) return
+
+          onTocLoad?.(book.toc ?? [])
 
           function handleLoad(e: CustomEvent) {
             const doc: Document = e.detail?.doc
@@ -157,6 +161,9 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       },
       prev: async () => {
         try { await (paginatorRef.current as any)?.prev?.() } catch { /* ignore */ }
+      },
+      goTo: async (href: string) => {
+        try { await (paginatorRef.current as any)?.goTo?.(href) } catch { /* ignore */ }
       },
     }))
 

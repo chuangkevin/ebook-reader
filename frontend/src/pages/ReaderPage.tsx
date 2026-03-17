@@ -2,13 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppBar, Box, IconButton, Toolbar, Typography } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useBookStore } from '../stores/bookStore'
 import { useUserStore } from '../stores/userStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { api } from '../services/api.service'
-import EpubReader, { type EpubReaderHandle } from '../components/reader/EpubReader'
-import ReaderSettings from '../components/reader/ReaderSettings'
+import EpubReader, { type EpubReaderHandle } from '../components/Reader/EpubReader'
+import ReaderSettings from '../components/Reader/ReaderSettings'
+import TocDrawer from '../components/Reader/TocDrawer'
+import useSwipeNavigation from '../hooks/useSwipeNavigation'
+import type { TocItem } from '../types'
 
 const TOOLBAR_HEIGHT = 44
 
@@ -21,8 +25,17 @@ export default function ReaderPage() {
   const { settings, setSettings } = useSettingsStore()
 
   const readerRef = useRef<EpubReaderHandle>(null)
+  const readerAreaRef = useRef<HTMLDivElement>(null)
   const [progressPercent, setProgressPercent] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [tocOpen, setTocOpen] = useState(false)
+  const [toc, setToc] = useState<TocItem[]>([])
+
+  useSwipeNavigation(
+    readerAreaRef,
+    () => readerRef.current?.next(),
+    () => readerRef.current?.prev(),
+  )
 
   // Redirect if no book or user
   useEffect(() => {
@@ -115,9 +128,17 @@ export default function ReaderPage() {
             color="inherit"
             size="small"
             onClick={() => navigate('/library')}
-            sx={{ mr: 1 }}
+            sx={{ mr: 0.5 }}
           >
             <ArrowBackIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            color="inherit"
+            size="small"
+            onClick={() => setTocOpen(true)}
+            sx={{ mr: 1 }}
+          >
+            <MenuBookIcon fontSize="small" />
           </IconButton>
           <Typography
             variant="body2"
@@ -146,7 +167,7 @@ export default function ReaderPage() {
       </AppBar>
 
       {/* Reader area */}
-      <Box sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}>
+      <Box ref={readerAreaRef} sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}>
         <EpubReader
           ref={readerRef}
           bookId={bookIdNum}
@@ -155,6 +176,7 @@ export default function ReaderPage() {
           writingMode={settings.writingMode}
           fontSize={settings.fontSize}
           onProgressChange={handleProgressChange}
+          onTocLoad={setToc}
         />
       </Box>
 
@@ -162,6 +184,15 @@ export default function ReaderPage() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         userId={currentUser.id}
+      />
+
+      <TocDrawer
+        open={tocOpen}
+        onClose={() => setTocOpen(false)}
+        toc={toc}
+        onNavigate={(href) => {
+          readerRef.current?.goTo(href)
+        }}
       />
     </Box>
   )

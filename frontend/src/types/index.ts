@@ -25,3 +25,9 @@ export interface ReaderSettings {
   theme: 'light' | 'sepia' | 'dark'
   openccMode: 'none' | 'tw2s' | 's2tw'
 }
+
+export interface TocItem {
+  label: string
+  href: string
+  subitems?: TocItem[]
+}

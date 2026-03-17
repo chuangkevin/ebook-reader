@@ -36,13 +36,13 @@
 - [x] 5.3 實作橫排模式：設定 `horizontal-tb`，Paginator 以 scrollLeft 分頁
 - [x] 5.4 實作章節邊界翻頁：監聽 `at-start`/`at-end` 事件，切換章節
 - [x] 5.5 實作向後跨章節：載入上一章並跳到最後一頁
-- [ ] 5.6 實作目錄（TOC）：顯示章節列表，點選跳轉
+- [x] 5.6 實作目錄（TOC）：顯示章節列表，點選跳轉
 
 ## 6. 翻頁操作
 
 - [x] 6.1 實作觸控翻頁：點擊螢幕左/右（橫排）或上/下（直排）區域
 - [x] 6.2 實作鍵盤翻頁：ArrowLeft/Right/Up/Down、PageUp/Down、Space
-- [ ] 6.3 實作滑動手勢翻頁（touch swipe）
+- [x] 6.3 實作滑動手勢翻頁（touch swipe）
 - [x] 6.4 防誤觸：翻頁區域禁用 user-select
 - [ ] 6.5 實作翻頁區域配置（預設/左手/右手）
 
