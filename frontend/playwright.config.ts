@@ -17,12 +17,23 @@ export default defineConfig({
     video: 'retain-on-failure',
     actionTimeout: 15000,
   },
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 60000,
-  },
+  webServer: [
+    {
+      // 後端：若已在跑則直接重用，否則啟動
+      command: 'npm run dev',
+      cwd: '../backend',
+      url: 'http://localhost:3003/health',
+      reuseExistingServer: true,
+      timeout: 60000,
+    },
+    {
+      // 前端 Vite dev server
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60000,
+    },
+  ],
   projects: [
     {
       name: 'chromium',
