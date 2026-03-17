@@ -9,6 +9,8 @@ import { useUserStore } from '../stores/userStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { api } from '../services/api.service'
 import EpubReader, { type EpubReaderHandle } from '../components/Reader/EpubReader'
+import PdfReader, { type PdfReaderHandle } from '../components/Reader/PdfReader'
+import TxtReader, { type TxtReaderHandle } from '../components/Reader/TxtReader'
 import ReaderSettings from '../components/Reader/ReaderSettings'
 import TocDrawer from '../components/Reader/TocDrawer'
 import useSwipeNavigation from '../hooks/useSwipeNavigation'
@@ -24,7 +26,8 @@ export default function ReaderPage() {
   const currentUser = useUserStore((s) => s.currentUser)
   const { settings, setSettings } = useSettingsStore()
 
-  const readerRef = useRef<EpubReaderHandle>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const readerRef = useRef<EpubReaderHandle | PdfReaderHandle | TxtReaderHandle>(null)
   const readerAreaRef = useRef<HTMLDivElement>(null)
   const [progressPercent, setProgressPercent] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -81,10 +84,20 @@ export default function ReaderPage() {
       if (!currentUser || !currentBook) return
 
       // Parse fraction for display
+      // PDF:  @@pageNum@@totalPages   -> pageNum/totalPages
+      // EPUB: @@chapterIndex@@scrollFraction  -> scrollFraction (0-1)
+      // TXT:  @@scrollFraction@@1    -> scrollFraction (0-1)
       const parts = progress.split('@@').filter(Boolean)
       if (parts.length >= 2) {
-        const fraction = parseFloat(parts[1])
-        setProgressPercent(Math.round(fraction * 100))
+        const first = parseFloat(parts[0])
+        const second = parseFloat(parts[1])
+        if (currentBook.format === 'pdf' && second > 0) {
+          setProgressPercent(Math.round((first / second) * 100))
+        } else if (currentBook.format === 'txt') {
+          setProgressPercent(Math.round(first * 100))
+        } else {
+          setProgressPercent(Math.round(second * 100))
+        }
       }
 
       // Update store + persist
@@ -99,6 +112,7 @@ export default function ReaderPage() {
   if (!currentBook || !currentUser) return null
 
   const bookIdNum = parseInt(bookId ?? '0', 10)
+  const format = currentBook.format
 
   return (
     <Box
@@ -168,17 +182,46 @@ export default function ReaderPage() {
 
       {/* Reader area */}
       <Box ref={readerAreaRef} sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}>
-        <EpubReader
-          ref={readerRef}
-          bookId={bookIdNum}
-          userId={currentUser.id}
-          initialProgress={currentBook.progress}
-          writingMode={settings.writingMode}
-          fontSize={settings.fontSize}
-          tapZoneLayout={settings.tapZoneLayout}
-          onProgressChange={handleProgressChange}
-          onTocLoad={setToc}
-        />
+        {format === 'epub' && (
+          <EpubReader
+            ref={readerRef as React.Ref<EpubReaderHandle>}
+            bookId={bookIdNum}
+            userId={currentUser.id}
+            initialProgress={currentBook.progress}
+            writingMode={settings.writingMode}
+            fontSize={settings.fontSize}
+            tapZoneLayout={settings.tapZoneLayout}
+            openccMode={settings.openccMode}
+            onProgressChange={handleProgressChange}
+            onTocLoad={setToc}
+          />
+        )}
+
+        {format === 'pdf' && (
+          <PdfReader
+            ref={readerRef as React.Ref<PdfReaderHandle>}
+            bookId={bookIdNum}
+            userId={currentUser.id}
+            initialProgress={currentBook.progress}
+            writingMode={settings.writingMode}
+            fontSize={settings.fontSize}
+            tapZoneLayout={settings.tapZoneLayout}
+            onProgressChange={handleProgressChange}
+          />
+        )}
+
+        {format === 'txt' && (
+          <TxtReader
+            ref={readerRef as React.Ref<TxtReaderHandle>}
+            bookId={bookIdNum}
+            userId={currentUser.id}
+            initialProgress={currentBook.progress}
+            writingMode={settings.writingMode}
+            fontSize={settings.fontSize}
+            tapZoneLayout={settings.tapZoneLayout}
+            onProgressChange={handleProgressChange}
+          />
+        )}
       </Box>
 
       <ReaderSettings
