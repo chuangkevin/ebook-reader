@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>foliate-js Spike — 直排/橫排驗證</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+  #toolbar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0; flex-wrap: wrap;
+  }
+  #toolbar button {
+    padding: 6px 12px; border: 1px solid #555; background: #3a3a3a; color: #eee;
+    border-radius: 4px; cursor: pointer; font-size: 13px;
+  }
+  #toolbar button:hover { background: #4a4a4a; }
+  #toolbar button.active { background: #0070f3; border-color: #0070f3; }
+  #status { font-size: 12px; color: #aaa; flex: 1; text-align: right; min-width: 120px; }
+
+  #reader-area { flex: 1; position: relative; overflow: hidden; }
+
+  foliate-paginator {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #log {
+    position: fixed; bottom: 8px; left: 8px; right: 8px;
+    background: rgba(0,0,0,0.8); border: 1px solid #444;
+    padding: 8px; border-radius: 6px; font-size: 11px; font-family: monospace;
+    max-height: 120px; overflow-y: auto; z-index: 100; pointer-events: none;
+  }
+  #log div { color: #0f0; margin-bottom: 2px; }
+  #log div.err { color: #f66; }
+
+  .tap-zone {
+    position: absolute; top: 0; width: 30%; height: 100%;
+    z-index: 10; cursor: pointer; -webkit-user-select: none; user-select: none;
+  }
+  #tap-prev { left: 0; }
+  #tap-next { right: 0; }
+
+  #drop-overlay {
+    position: fixed; inset: 0; background: rgba(0,100,255,0.15);
+    border: 3px dashed #0070f3; display: none; align-items: center;
+    justify-content: center; font-size: 20px; z-index: 200;
+  }
+  #drop-overlay.active { display: flex; }
+</style>
+
+<div id="toolbar">
+  <label>
+    <input type="file" id="file-input" accept=".epub" style="display:none">
+    <button onclick="document.getElementById('file-input').click()">📂 開啟 EPUB</button>
+  </label>
+  <button id="btn-vertical" onclick="setMode('vertical')">直排</button>
+  <button id="btn-horizontal" onclick="setMode('horizontal')">橫排</button>
+  <button onclick="doPrev()">◀ 上一頁</button>
+  <button onclick="doNext()">下一頁 ▶</button>
+  <div id="status">未載入</div>
+</div>
+
+<div id="reader-area">
+  <foliate-paginator id="paginator"></foliate-paginator>
+  <div id="tap-prev" class="tap-zone" onclick="doPrev()"></div>
+  <div id="tap-next" class="tap-zone" onclick="doNext()"></div>
+</div>
+
+<div id="log"></div>
+
+<div id="drop-overlay">拖曳 EPUB 到這裡</div>
+
+<script type="module">
+import { Paginator } from './foliate-js/paginator.js'
+import { makeBook } from './foliate-js/view.js'
+
+// foliate-js already calls customElements.define('foliate-paginator', Paginator)
+const paginator = document.getElementById('paginator')
+const status = document.getElementById('status')
+const log = document.getElementById('log')
+
+let currentMode = 'vertical' // 'vertical' | 'horizontal'
+let book = null
+
+function addLog(msg, isErr = false) {
+  const d = document.createElement('div')
+  if (isErr) d.className = 'err'
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`
+  log.prepend(d)
+  while (log.children.length > 20) log.lastChild.remove()
+  console.log(msg)
+}
+
+window.setMode = async (mode) => {
+  currentMode = mode
+  document.getElementById('btn-vertical').classList.toggle('active', mode === 'vertical')
+  document.getElementById('btn-horizontal').classList.toggle('active', mode === 'horizontal')
+  addLog(`切換模式：${mode}`)
+
+  if (book) {
+    // Update currently loaded iframes immediately, then re-open to reset layout
+    for (const { doc } of paginator.getContents()) injectWritingMode(doc)
+    await openBook(book)
+  }
+}
+
+window.doPrev = () => {
+  if (!paginator.atStart) {
+    addLog('prev() — atStart=' + paginator.atStart + ' atEnd=' + paginator.atEnd)
+    paginator.prev()
+  } else {
+    addLog('⚠️  atStart=true，已在最前頁')
+  }
+}
+
+window.doNext = () => {
+  if (!paginator.atEnd) {
+    addLog('next() — atStart=' + paginator.atStart + ' atEnd=' + paginator.atEnd)
+    paginator.next()
+  } else {
+    addLog('⚠️  atEnd=true，已在最後頁')
+  }
+}
+
+async function openBook(epubBook) {
+  book = epubBook
+  addLog(`開啟書籍，模式：${currentMode}`)
+
+  // Configure layout via HTML attributes (paginator.open() only takes a book object)
+  paginator.setAttribute('flow', 'paginated')
+  paginator.setAttribute('gap', '0.06')
+  paginator.setAttribute('max-column-count', '1')
+
+  paginator.open(epubBook)
+  addLog('paginator.open() 完成，導航到第一頁...')
+
+  // Must call next() to actually render the first section
+  await paginator.next()
+  addLog('第一頁載入完成')
+}
+
+paginator.addEventListener('relocate', ({ detail }) => {
+  const { fraction, location } = detail
+  const pct = Math.round((fraction ?? 0) * 1000) / 10
+  const pg = location?.current ?? '?'
+  const total = location?.total ?? '?'
+  status.textContent = `第 ${pg}/${total} 頁 · ${pct}%  atStart=${paginator.atStart} atEnd=${paginator.atEnd}`
+  addLog(`relocate → page=${pg}/${total} fraction=${fraction?.toFixed(4)} atStart=${paginator.atStart} atEnd=${paginator.atEnd}`)
+  // Ensure writing-mode is always current (handles reused iframes)
+  for (const { doc } of paginator.getContents()) injectWritingMode(doc)
+})
+
+function injectWritingMode(doc) {
+  if (!doc?.head) return
+  const wm = currentMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb'
+  const existing = doc.getElementById('__spike-wm')
+  if (existing) {
+    existing.textContent = `html, body { writing-mode: ${wm} !important; -webkit-writing-mode: ${wm} !important; }`
+    return
+  }
+  const style = doc.createElement('style')
+  style.id = '__spike-wm'
+  style.textContent = `html, body { writing-mode: ${wm} !important; -webkit-writing-mode: ${wm} !important; }`
+  doc.head.appendChild(style)
+}
+
+paginator.addEventListener('load', ({ detail: { doc } }) => {
+  addLog('chapter loaded')
+  injectWritingMode(doc)
+})
+
+// File input
+document.getElementById('file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  addLog(`載入檔案：${file.name} (${(file.size/1024).toFixed(0)} KB)`)
+  try {
+    const epub = await makeBook(file)
+    addLog(`解析完成，共 ${epub.spine?.items?.length ?? '?'} 個章節`)
+    await openBook(epub)
+    // Set initial mode buttons
+    document.getElementById('btn-vertical').classList.toggle('active', currentMode === 'vertical')
+    document.getElementById('btn-horizontal').classList.toggle('active', currentMode === 'horizontal')
+  } catch (err) {
+    addLog(`錯誤：${err.message}`, true)
+    console.error(err)
+  }
+})
+
+// Drag & drop
+const overlay = document.getElementById('drop-overlay')
+document.addEventListener('dragover', e => { e.preventDefault(); overlay.classList.add('active') })
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) overlay.classList.remove('active') })
+document.addEventListener('drop', async e => {
+  e.preventDefault()
+  overlay.classList.remove('active')
+  const file = e.dataTransfer.files[0]
+  if (!file || !file.name.endsWith('.epub')) { addLog('請拖入 .epub 檔案', true); return }
+  addLog(`拖入：${file.name}`)
+  try {
+    const epub = await makeBook(file)
+    await openBook(epub)
+  } catch(err) { addLog(`錯誤：${err.message}`, true) }
+})
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+    e.preventDefault(); doNext()
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+    e.preventDefault(); doPrev()
+  }
+})
+
+addLog('foliate-js spike 初始化完成，請開啟 EPUB')
+setMode('vertical')
+</script>
+</html>
