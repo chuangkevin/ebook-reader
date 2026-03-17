@@ -1,0 +1,14 @@
+node_modules/
+dist/
+data/
+logs/
+*.log
+.env
+.DS_Store
+.mcp.json
+screenshots/
+test-results/
+ebook/
+spike/
+reference/
+frontend/.vite/
