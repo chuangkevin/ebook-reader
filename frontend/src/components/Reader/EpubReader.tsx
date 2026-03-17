@@ -6,6 +6,7 @@ import {
 } from 'react'
 
 import './EpubReader.css'
+import { convertDoc } from '../../utils/opencc'
 
 // Register the foliate-paginator custom element
 // @ts-ignore
@@ -32,6 +33,7 @@ interface EpubReaderProps {
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number
   tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
+  openccMode?: 'none' | 'tw2s' | 's2tw'
   onProgressChange: (progress: string) => void
   onTocLoad?: (toc: any[]) => void
 }
@@ -55,18 +57,20 @@ function parseProgress(progress?: string): { chapterIndex: number; scrollFractio
 }
 
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onProgressChange, onTocLoad }, ref) => {
+  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', openccMode = 'none', onProgressChange, onTocLoad }, ref) => {
     const paginatorRef = useRef<HTMLElement>(null)
     // Keep latest values accessible in event listeners without re-running effect
     const writingModeRef = useRef(writingMode)
     const fontSizeRef = useRef(fontSize)
+    const openccModeRef = useRef(openccMode)
     const onProgressChangeRef = useRef(onProgressChange)
 
     useEffect(() => { writingModeRef.current = writingMode }, [writingMode])
     useEffect(() => { fontSizeRef.current = fontSize }, [fontSize])
+    useEffect(() => { openccModeRef.current = openccMode }, [openccMode])
     useEffect(() => { onProgressChangeRef.current = onProgressChange }, [onProgressChange])
 
-    // Re-inject CSS when writingMode or fontSize changes without reinitializing
+    // Re-inject CSS when writingMode, fontSize, or openccMode changes without reinitializing
     useEffect(() => {
       const paginator = paginatorRef.current as any
       if (!paginator) return
@@ -78,7 +82,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       } catch {
         // paginator may not be initialized yet
       }
-    }, [writingMode, fontSize])
+    }, [writingMode, fontSize, openccMode])
 
     useEffect(() => {
       const paginator = paginatorRef.current as any
@@ -105,7 +109,12 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
 
           function handleLoad(e: CustomEvent) {
             const doc: Document = e.detail?.doc
-            if (doc) injectWritingMode(doc, writingModeRef.current, fontSizeRef.current)
+            if (doc) {
+              injectWritingMode(doc, writingModeRef.current, fontSizeRef.current)
+              if (openccModeRef.current !== 'none') {
+                convertDoc(doc, openccModeRef.current)
+              }
+            }
           }
 
           function handleRelocate(e: CustomEvent) {
@@ -114,7 +123,12 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
             try {
               const contents = paginator.getContents?.() ?? []
               for (const { doc } of contents) {
-                if (doc) injectWritingMode(doc, writingModeRef.current, fontSizeRef.current)
+                if (doc) {
+                  injectWritingMode(doc, writingModeRef.current, fontSizeRef.current)
+                  if (openccModeRef.current !== 'none') {
+                    convertDoc(doc, openccModeRef.current)
+                  }
+                }
               }
             } catch { /* ignore */ }
 
