@@ -59,6 +59,9 @@ function parseProgress(progress?: string): { chapterIndex: number; scrollFractio
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
   ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', openccMode = 'none', onProgressChange, onTocLoad }, ref) => {
     const paginatorRef = useRef<HTMLElement>(null)
+    const bookRef = useRef<any>(null)
+    const currentProgressRef = useRef<{ index: number; anchor: number } | null>(null)
+    const modeSwitchingRef = useRef(false)
     // Keep latest values accessible in event listeners without re-running effect
     const writingModeRef = useRef(writingMode)
     const fontSizeRef = useRef(fontSize)
@@ -70,7 +73,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
     useEffect(() => { openccModeRef.current = openccMode }, [openccMode])
     useEffect(() => { onProgressChangeRef.current = onProgressChange }, [onProgressChange])
 
-    // Re-inject CSS when writingMode, fontSize, or openccMode changes without reinitializing
+    // Re-inject CSS when fontSize/openccMode changes (no position reset needed)
     useEffect(() => {
       const paginator = paginatorRef.current as any
       if (!paginator) return
@@ -79,10 +82,36 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         for (const { doc } of contents) {
           if (doc) injectWritingMode(doc, writingMode, fontSize)
         }
+      } catch { /* paginator may not be initialized yet */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fontSize, openccMode])
+
+    // Re-inject CSS when writingMode changes; restore position since layout recalculation resets it
+    useEffect(() => {
+      const paginator = paginatorRef.current as any
+      if (!paginator) return
+      const pos = currentProgressRef.current
+      if (!pos) return  // not yet initialized, skip
+      // Suppress progress events during mode switch + restore window
+      modeSwitchingRef.current = true
+      try {
+        const contents = paginator.getContents?.() ?? []
+        for (const { doc } of contents) {
+          if (doc) injectWritingMode(doc, writingMode, fontSize)
+        }
+        // After writing mode change, restore the current reading position
+        setTimeout(async () => {
+          try {
+            await paginator.goTo({ index: pos.index, anchor: pos.anchor })
+          } catch { /* ignore */ }
+          // Resume progress reporting after position is restored
+          setTimeout(() => { modeSwitchingRef.current = false }, 800)
+        }, 300)
       } catch {
-        // paginator may not be initialized yet
+        modeSwitchingRef.current = false
       }
-    }, [writingMode, fontSize, openccMode])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [writingMode])
 
     useEffect(() => {
       const paginator = paginatorRef.current as any
@@ -105,6 +134,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           const book = await makeBook(file)
           if (destroyed) return
 
+          bookRef.current = book
           onTocLoad?.(book.toc ?? [])
 
           function handleLoad(e: CustomEvent) {
@@ -133,7 +163,11 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
             } catch { /* ignore */ }
 
             if (typeof index === 'number' && typeof fraction === 'number') {
-              onProgressChangeRef.current(`@@${index}@@${fraction}`)
+              currentProgressRef.current = { index, anchor: fraction }
+              // Suppress progress saves during mode switching to avoid overwriting with reset position
+              if (!modeSwitchingRef.current) {
+                onProgressChangeRef.current(`@@${index}@@${fraction}`)
+              }
             }
           }
 
@@ -163,6 +197,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
 
       return () => {
         destroyed = true
+        bookRef.current = null
         // Remove event listeners — paginator element persists in DOM so clean up
         try {
           paginator.removeEventListener('load', () => {})
@@ -180,7 +215,18 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         try { await (paginatorRef.current as any)?.prev?.() } catch { /* ignore */ }
       },
       goTo: async (href: string) => {
-        try { await (paginatorRef.current as any)?.goTo?.(href) } catch { /* ignore */ }
+        try {
+          const paginator = paginatorRef.current as any
+          if (!paginator) return
+          // Resolve href → { index, anchor } via the book object
+          const book = bookRef.current
+          if (book?.resolveHref) {
+            const location = await book.resolveHref(href)
+            await paginator.goTo(location)
+          } else {
+            await paginator.goTo(href)
+          }
+        } catch { /* ignore */ }
       },
     }))
 
