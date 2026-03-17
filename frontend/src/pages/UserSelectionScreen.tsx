@@ -114,7 +114,7 @@ export default function UserSelectionScreen() {
       {!loading && !error && (
         <Grid container spacing={3} justifyContent="center" sx={{ maxWidth: 800, width: '100%' }}>
           {users.map((user) => (
-            <Grid item key={user.id}>
+            <Grid key={user.id}>
               <Card
                 sx={{
                   width: 140,
@@ -173,7 +173,7 @@ export default function UserSelectionScreen() {
             </Grid>
           ))}
 
-          <Grid item>
+          <Grid>
             <Card
               sx={{
                 width: 140,

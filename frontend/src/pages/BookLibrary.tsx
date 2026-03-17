@@ -219,17 +219,17 @@ export default function BookLibrary() {
         <Grid container spacing={2}>
           {loading
             ? Array.from({ length: 8 }).map((_, i) => (
-                <Grid item xs={6} sm={4} md={3} key={i}>
+                <Grid size={{ xs: 6, sm: 4, md: 3 }} key={i}>
                   <Skeleton variant="rectangular" height={280} sx={{ bgcolor: '#2a2a2a', borderRadius: 1 }} />
                 </Grid>
               ))
             : books.map((book) => (
-                <Grid item xs={6} sm={4} md={3} key={book.id}>
+                <Grid size={{ xs: 6, sm: 4, md: 3 }} key={book.id}>
                   <BookCard book={book} onDelete={handleDelete} onClick={handleCardClick} />
                 </Grid>
               ))}
           {!loading && books.length === 0 && (
-            <Grid item xs={12}>
+            <Grid size={{ xs: 12 }}>
               <Box sx={{ textAlign: 'center', mt: 8, color: 'grey.600' }}>
                 <UploadFileIcon sx={{ fontSize: 64, mb: 2 }} />
                 <Typography variant="h6">書庫是空的</Typography>

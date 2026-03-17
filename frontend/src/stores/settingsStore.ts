@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { ReaderSettings } from '../types/index'
+import type { ReaderSettings } from '../types/index'
 
 interface SettingsState {
   settings: ReaderSettings

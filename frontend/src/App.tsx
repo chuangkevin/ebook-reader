@@ -1,16 +1,20 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import UserSelectionScreen from './pages/UserSelectionScreen'
-import BookLibrary from './pages/BookLibrary'
-import ReaderPage from './pages/ReaderPage'
+
+const UserSelectionScreen = lazy(() => import('./pages/UserSelectionScreen'))
+const BookLibrary = lazy(() => import('./pages/BookLibrary'))
+const ReaderPage = lazy(() => import('./pages/ReaderPage'))
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<UserSelectionScreen />} />
-        <Route path="/library" element={<BookLibrary />} />
-        <Route path="/reader/:bookId" element={<ReaderPage />} />
-      </Routes>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/" element={<UserSelectionScreen />} />
+          <Route path="/library" element={<BookLibrary />} />
+          <Route path="/reader/:bookId" element={<ReaderPage />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }
