@@ -31,27 +31,27 @@
 
 ## 5. EPUB 閱讀器核心
 
-- [ ] 5.1 建立 `EpubReader` 元件，用 `useRef` + `useEffect` 包裝 foliate-js Paginator
-- [ ] 5.2 實作直排模式：設定 `vertical-rl`，Paginator 以 scrollTop 分頁
-- [ ] 5.3 實作橫排模式：設定 `horizontal-tb`，Paginator 以 scrollLeft 分頁
-- [ ] 5.4 實作章節邊界翻頁：監聽 `at-start`/`at-end` 事件，切換章節
-- [ ] 5.5 實作向後跨章節：載入上一章並跳到最後一頁
+- [x] 5.1 建立 `EpubReader` 元件，用 `useRef` + `useEffect` 包裝 foliate-js Paginator
+- [x] 5.2 實作直排模式：設定 `vertical-rl`，Paginator 以 scrollTop 分頁
+- [x] 5.3 實作橫排模式：設定 `horizontal-tb`，Paginator 以 scrollLeft 分頁
+- [x] 5.4 實作章節邊界翻頁：監聽 `at-start`/`at-end` 事件，切換章節
+- [x] 5.5 實作向後跨章節：載入上一章並跳到最後一頁
 - [ ] 5.6 實作目錄（TOC）：顯示章節列表，點選跳轉
 
 ## 6. 翻頁操作
 
-- [ ] 6.1 實作觸控翻頁：點擊螢幕左/右（橫排）或上/下（直排）區域
-- [ ] 6.2 實作鍵盤翻頁：ArrowLeft/Right/Up/Down、PageUp/Down、Space
+- [x] 6.1 實作觸控翻頁：點擊螢幕左/右（橫排）或上/下（直排）區域
+- [x] 6.2 實作鍵盤翻頁：ArrowLeft/Right/Up/Down、PageUp/Down、Space
 - [ ] 6.3 實作滑動手勢翻頁（touch swipe）
-- [ ] 6.4 防誤觸：翻頁區域禁用 user-select
+- [x] 6.4 防誤觸：翻頁區域禁用 user-select
 - [ ] 6.5 實作翻頁區域配置（預設/左手/右手）
 
 ## 7. 閱讀進度
 
-- [ ] 7.1 實作進度儲存：翻頁後儲存 `{ chapterIndex, scrollFraction }` → `@@chapterIndex@@scrollFraction` 格式
-- [ ] 7.2 整合 `PUT /api/users/:userId/books/:bookId/progress`
-- [ ] 7.3 實作進度恢復：開書時讀取進度，跳到對應章節與捲動位置
-- [ ] 7.4 實作進度顯示：底部常駐顯示頁碼 / 總頁數與百分比
+- [x] 7.1 實作進度儲存：翻頁後儲存 `{ chapterIndex, scrollFraction }` → `@@chapterIndex@@scrollFraction` 格式
+- [x] 7.2 整合 `PUT /api/users/:userId/books/:bookId/progress`
+- [x] 7.3 實作進度恢復：開書時讀取進度，跳到對應章節與捲動位置
+- [x] 7.4 實作進度顯示：底部常駐顯示頁碼 / 總頁數與百分比
 
 ## 8. 閱讀設定
 
