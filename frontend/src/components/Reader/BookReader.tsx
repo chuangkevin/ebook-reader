@@ -230,9 +230,14 @@ export default function BookReader() {
   const renderGenRef = useRef(0);
   // Scroll fraction to restore after initial render (from saved progress)
   const scrollRestoreRef = useRef<number | null>(null);
+  // True while the 60ms expansion timer is in-flight (horizontal mode).
+  // goNext/goPrev must defer r.next()/r.prev() until expansion completes,
+  // otherwise maxScroll=0 causes the first tap to jump a whole chapter.
+  const isExpandingRef = useRef(false);
 
   const goPrevRef = useRef<() => void>(() => {});
   const goNextRef = useRef<() => void>(() => {});
+  const updatePageAfterScrollRef = useRef<() => void>(() => {});
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
@@ -519,6 +524,10 @@ export default function BookReader() {
         if (scrollLeft > 0) {
           container.scrollLeft = Math.max(0, scrollLeft - delta);
           updatePageAfterScroll();
+        } else if (isExpandingRef.current || renderGenRef.current === 0) {
+          // Not ready: expansion in-flight or book hasn't rendered yet.
+          // Defer to avoid r.prev() jumping to previous chapter prematurely.
+          window.setTimeout(() => goPrevRef.current(), 150);
         } else {
           prevJumpRef.current = true;
           r.prev();
@@ -567,6 +576,12 @@ export default function BookReader() {
         if (scrollLeft < maxScroll - 2) {
           container.scrollLeft += delta;
           updatePageAfterScroll();
+        } else if (isExpandingRef.current || renderGenRef.current === 0) {
+          // Two cases where maxScroll is unreliable:
+          // 1. isExpandingRef: 60ms expansion timer is in-flight after rendered.
+          // 2. renderGenRef===0: epub hasn't fired 'rendered' yet (still loading).
+          // In either case, defer so we don't misfire r.next() and jump chapters.
+          window.setTimeout(() => goNextRef.current(), 150);
         } else {
           prevJumpRef.current = false;
           r.next();
@@ -587,6 +602,7 @@ export default function BookReader() {
   // Keep refs in sync for keyboard/iframe callbacks
   useEffect(() => { goPrevRef.current = goPrev; }, [goPrev]);
   useEffect(() => { goNextRef.current = goNext; }, [goNext]);
+  useEffect(() => { updatePageAfterScrollRef.current = updatePageAfterScroll; }, [updatePageAfterScroll]);
 
   // Keyboard: Arrow keys, PageUp/Down, Space, Volume keys
   useEffect(() => {
@@ -858,10 +874,16 @@ export default function BookReader() {
                   // the new chapter's iframe to the wrong width and causing a black screen.
                   renderGenRef.current += 1;
                   const capturedGen = renderGenRef.current;
+                  // Reset expansion flag so any pending deferred nav from a previous chapter
+                  // doesn't mistakenly fire during this new chapter's expansion window.
+                  isExpandingRef.current = false;
 
                   const isHorizontal = settingsRef.current.writingMode !== 'vertical';
 
                   if (isHorizontal) {
+                    // Signal that the 60ms expansion timer is in-flight.
+                    // goNext/goPrev will defer r.next()/r.prev() until this is cleared.
+                    isExpandingRef.current = true;
                     // Root-cause fix for iOS/WebKit horizontal paging:
                     //
                     // Books that declare `writing-mode: vertical-rl !important` in their
@@ -972,6 +994,9 @@ export default function BookReader() {
                         capturedIframe.style.width = expandedW + 'px';
                       }
 
+                      // Expansion complete — clear the flag so goNext/goPrev can proceed.
+                      isExpandingRef.current = false;
+
                       // After expansion, handle scroll positioning:
                       const mgr4 = (renditionRef.current as any)?.manager;
                       const ec = mgr4?.container as HTMLElement | null;
@@ -981,12 +1006,16 @@ export default function BookReader() {
                           prevJumpRef.current = false;
                           const maxS = ec.scrollWidth - ec.offsetWidth;
                           ec.scrollLeft = maxS;
+                          // Save restored position (relocated fired at scrollLeft=0, fraction=0)
+                          window.setTimeout(() => updatePageAfterScrollRef.current(), 10);
                         } else if (scrollRestoreRef.current !== null) {
                           // Restore saved progress position
                           const frac = scrollRestoreRef.current;
                           scrollRestoreRef.current = null;
                           const maxS = ec.scrollWidth - ec.offsetWidth;
                           ec.scrollLeft = Math.round(frac * maxS);
+                          // Save restored position so next open doesn't revert to @@0.0000
+                          window.setTimeout(() => updatePageAfterScrollRef.current(), 10);
                         }
                       }
                     }, 60);
@@ -1041,6 +1070,7 @@ export default function BookReader() {
                           requestAnimationFrame(() => {
                             const maxS = ec2.scrollHeight - ec2.offsetHeight;
                             ec2.scrollTop = maxS;
+                            updatePageAfterScrollRef.current();
                           });
                         } else if (scrollRestoreRef.current !== null) {
                           // Restore saved progress
@@ -1049,6 +1079,7 @@ export default function BookReader() {
                           requestAnimationFrame(() => {
                             const maxS = ec2.scrollHeight - ec2.offsetHeight;
                             ec2.scrollTop = Math.round(frac * maxS);
+                            updatePageAfterScrollRef.current();
                           });
                         }
                       }
