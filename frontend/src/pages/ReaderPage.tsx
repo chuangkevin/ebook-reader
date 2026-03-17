@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppBar, Box, IconButton, Toolbar, Typography } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import SettingsIcon from '@mui/icons-material/Settings'
 import { useBookStore } from '../stores/bookStore'
 import { useUserStore } from '../stores/userStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { api } from '../services/api.service'
 import EpubReader, { type EpubReaderHandle } from '../components/reader/EpubReader'
+import ReaderSettings from '../components/reader/ReaderSettings'
 
 const TOOLBAR_HEIGHT = 44
 
@@ -16,10 +18,11 @@ export default function ReaderPage() {
   const currentBook = useBookStore((s) => s.currentBook)
   const updateBookProgress = useBookStore((s) => s.updateBookProgress)
   const currentUser = useUserStore((s) => s.currentUser)
-  const { settings } = useSettingsStore()
+  const { settings, setSettings } = useSettingsStore()
 
   const readerRef = useRef<EpubReaderHandle>(null)
   const [progressPercent, setProgressPercent] = useState(0)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Redirect if no book or user
   useEffect(() => {
@@ -27,6 +30,15 @@ export default function ReaderPage() {
       navigate('/')
     }
   }, [currentBook, currentUser, navigate])
+
+  // Load settings from API on mount
+  useEffect(() => {
+    if (!currentUser) return
+    api.settings.get(currentUser.id).then((s) => setSettings(s)).catch(() => {
+      // Use default settings if API fails
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id])
 
   // Keyboard navigation
   useEffect(() => {
@@ -122,6 +134,14 @@ export default function ReaderPage() {
           <Typography variant="caption" sx={{ color: 'grey.400', ml: 1, flexShrink: 0 }}>
             {progressPercent}%
           </Typography>
+          <IconButton
+            color="inherit"
+            size="small"
+            onClick={() => setSettingsOpen(true)}
+            sx={{ ml: 1 }}
+          >
+            <SettingsIcon fontSize="small" />
+          </IconButton>
         </Toolbar>
       </AppBar>
 
@@ -137,6 +157,12 @@ export default function ReaderPage() {
           onProgressChange={handleProgressChange}
         />
       </Box>
+
+      <ReaderSettings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        userId={currentUser.id}
+      />
     </Box>
   )
 }
