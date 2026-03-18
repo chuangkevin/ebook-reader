@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AppBar,
@@ -7,24 +7,36 @@ import {
   CardActionArea,
   CardContent,
   CardMedia,
-  Grid,
+  Fab,
   IconButton,
   LinearProgress,
   Skeleton,
+  Tooltip,
   Toolbar,
   Typography,
 } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
+import BookmarkIcon from '@mui/icons-material/Bookmark'
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
+import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
-import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { useUserStore } from '../stores/userStore'
 import { useBookStore } from '../stores/bookStore'
 import { api } from '../services/api.service'
 import type { Book } from '../types/index'
 
-function parseProgress(progress?: string): number {
+// Parse progress string (new format: @@chapterIndex@@fraction@@totalSections, old: @@idx@@fraction)
+function parseProgressPercent(progress?: string): number {
   if (!progress) return 0
   const parts = progress.split('@@').filter(Boolean)
-  return parts.length >= 2 ? parseFloat(parts[1]) * 100 : 0
+  if (parts.length >= 3) {
+    const idx = parseFloat(parts[0])
+    const frac = parseFloat(parts[1])
+    const total = parseFloat(parts[2])
+    if (total > 0) return Math.round(((idx + frac) / total) * 100)
+  }
+  if (parts.length >= 2) return Math.round(parseFloat(parts[1]) * 100)
+  return 0
 }
 
 const PLACEHOLDER_COLORS = [
@@ -38,16 +50,19 @@ function placeholderColor(title: string): string {
   return PLACEHOLDER_COLORS[Math.abs(hash) % PLACEHOLDER_COLORS.length]
 }
 
-function BookCard({
-  book,
-  onDelete,
-  onClick,
-}: {
+interface BookCardProps {
   book: Book
+  progressPercent?: number
+  bookmarked?: boolean
+  showClearProgress?: boolean
   onDelete: (book: Book) => void
   onClick: (book: Book) => void
-}) {
-  const progress = parseProgress(book.progress)
+  onBookmark: (bookId: string) => void
+  onClearProgress?: (bookId: string) => void
+}
+
+function BookCard({ book, progressPercent, bookmarked, showClearProgress, onDelete, onClick, onBookmark, onClearProgress }: BookCardProps) {
+  const pct = progressPercent ?? parseProgressPercent(book.progress)
 
   return (
     <Card
@@ -58,6 +73,8 @@ function BookCard({
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
+        transition: 'transform 0.15s',
+        '&:hover': { transform: 'scale(1.03)' },
       }}
     >
       <CardActionArea
@@ -69,12 +86,12 @@ function BookCard({
             component="img"
             image={book.coverUrl}
             alt={book.title}
-            sx={{ height: 180, objectFit: 'cover' }}
+            sx={{ height: 200, objectFit: 'cover' }}
           />
         ) : (
           <Box
             sx={{
-              height: 180,
+              height: 200,
               bgcolor: placeholderColor(book.title),
               display: 'flex',
               alignItems: 'center',
@@ -86,56 +103,93 @@ function BookCard({
             </Typography>
           </Box>
         )}
-        <CardContent sx={{ flexGrow: 1, pb: '8px !important' }}>
+        <CardContent sx={{ flexGrow: 1, pb: '8px !important', px: 1.5, pt: 1 }}>
           <Typography
-            variant="body1"
+            variant="body2"
             fontWeight={600}
-            sx={{
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              mb: 0.5,
-            }}
+            sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', mb: 0.5 }}
           >
             {book.title}
           </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color: 'grey.500',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+          <Typography variant="caption" sx={{ color: 'grey.500', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {book.author}
           </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={progress}
-            sx={{ mt: 1, borderRadius: 1, bgcolor: 'grey.800', '& .MuiLinearProgress-bar': { bgcolor: '#90caf9' } }}
-          />
+          {pct > 0 && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75 }}>
+              <LinearProgress
+                variant="determinate"
+                value={pct}
+                sx={{ flex: 1, borderRadius: 1, height: 5, bgcolor: 'grey.800', '& .MuiLinearProgress-bar': { bgcolor: '#90caf9' } }}
+              />
+              <Typography variant="caption" sx={{ color: 'grey.400', minWidth: 28, textAlign: 'right', fontSize: 10 }}>
+                {pct}%
+              </Typography>
+            </Box>
+          )}
         </CardContent>
       </CardActionArea>
-      <IconButton
-        size="small"
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete(book)
-        }}
+
+      {/* Action buttons */}
+      <Box sx={{ position: 'absolute', top: 4, right: 4, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        {showClearProgress && onClearProgress && (
+          <Tooltip title="不看了" placement="left">
+            <IconButton
+              size="small"
+              onClick={(e) => { e.stopPropagation(); onClearProgress(book.id) }}
+              sx={{ bgcolor: 'rgba(0,0,0,0.55)', color: 'grey.300', width: 28, height: 28, '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: 'white' } }}
+            >
+              <CloseIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+        <Tooltip title={bookmarked ? '取消稍後閱讀' : '稍後閱讀'} placement="left">
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); onBookmark(book.id) }}
+            sx={{ bgcolor: 'rgba(0,0,0,0.55)', color: bookmarked ? '#ffc107' : 'grey.300', width: 28, height: 28, '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' } }}
+          >
+            {bookmarked
+              ? <BookmarkIcon sx={{ fontSize: 14 }} />
+              : <BookmarkBorderIcon sx={{ fontSize: 14 }} />}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="刪除" placement="left">
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); onDelete(book) }}
+            sx={{ bgcolor: 'rgba(0,0,0,0.55)', color: 'grey.300', width: 28, height: 28, '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: 'white' } }}
+          >
+            <DeleteIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    </Card>
+  )
+}
+
+// Horizontal scroll section (Netflix-style row)
+function ScrollRow({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Box sx={{ mb: 5 }}>
+      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700, px: 2 }}>
+        {title}
+      </Typography>
+      <Box
         sx={{
-          position: 'absolute',
-          top: 4,
-          right: 4,
-          bgcolor: 'rgba(0,0,0,0.55)',
-          color: 'grey.300',
-          '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: 'white' },
+          display: 'flex',
+          gap: 2,
+          overflowX: 'auto',
+          px: 2,
+          pb: 1,
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255,255,255,0.2) transparent',
+          '::-webkit-scrollbar': { height: 5 },
+          '::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.2)', borderRadius: 3 },
         }}
       >
-        <DeleteIcon fontSize="small" />
-      </IconButton>
-    </Card>
+        {children}
+      </Box>
+    </Box>
   )
 }
 
@@ -144,19 +198,51 @@ export default function BookLibrary() {
   const currentUser = useUserStore((s) => s.currentUser)
   const { books, setBooks, setCurrentBook } = useBookStore()
   const [loading, setLoading] = useState(true)
+  const [bookmarkSet, setBookmarkSet] = useState<Set<string>>(new Set())
+  const [progressMap, setProgressMap] = useState<Map<string, { percentage: number; lastReadAt: number }>>(new Map())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (!currentUser) {
-      navigate('/')
-      return
-    }
+  const loadData = useCallback(async () => {
+    if (!currentUser) { navigate('/'); return }
     setLoading(true)
-    api.books.list(currentUser.id).then((data) => {
-      setBooks(data)
+    try {
+      const [booksData, bookmarksData, progressData] = await Promise.all([
+        api.books.list(currentUser.id),
+        api.bookmarks.list(currentUser.id),
+        api.books.getUserProgress(currentUser.id),
+      ])
+      setBooks(booksData)
+      setBookmarkSet(new Set(bookmarksData))
+      setProgressMap(new Map(progressData.map(p => [p.bookId, { percentage: p.percentage, lastReadAt: p.lastReadAt }])))
+    } catch {
+      // ignore
+    } finally {
       setLoading(false)
-    }).catch(() => setLoading(false))
+    }
   }, [currentUser, navigate, setBooks])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  // Split books into sections
+  const { continueReading, readLater, otherBooks } = useMemo(() => {
+    const reading: Array<{ book: Book; percentage: number; lastReadAt: number }> = []
+    const later: Book[] = []
+    const other: Book[] = []
+
+    for (const book of books) {
+      const prog = progressMap.get(book.id)
+      if (prog && prog.percentage > 0) {
+        reading.push({ book, percentage: prog.percentage, lastReadAt: prog.lastReadAt })
+      } else if (bookmarkSet.has(book.id)) {
+        later.push(book)
+      } else {
+        other.push(book)
+      }
+    }
+
+    reading.sort((a, b) => b.lastReadAt - a.lastReadAt)
+    return { continueReading: reading, readLater: later, otherBooks: other }
+  }, [books, progressMap, bookmarkSet])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -166,7 +252,7 @@ export default function BookLibrary() {
       const book = await api.books.upload(file, currentUser.id)
       setBooks([...books, book])
     } catch {
-      // upload failed silently
+      // ignore
     }
   }
 
@@ -174,8 +260,33 @@ export default function BookLibrary() {
     try {
       await api.books.remove(book.id)
       setBooks(books.filter((b) => b.id !== book.id))
+      setProgressMap(prev => { const m = new Map(prev); m.delete(book.id); return m })
     } catch {
-      // delete failed silently
+      // ignore
+    }
+  }
+
+  async function handleBookmark(bookId: string) {
+    if (!currentUser) return
+    try {
+      await api.bookmarks.toggle(currentUser.id, bookId)
+      setBookmarkSet(prev => {
+        const s = new Set(prev)
+        s.has(bookId) ? s.delete(bookId) : s.add(bookId)
+        return s
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleClearProgress(bookId: string) {
+    if (!currentUser) return
+    try {
+      await api.books.clearProgress(currentUser.id, bookId)
+      setProgressMap(prev => { const m = new Map(prev); m.delete(bookId); return m })
+    } catch {
+      // ignore
     }
   }
 
@@ -184,61 +295,87 @@ export default function BookLibrary() {
     navigate(`/reader/${book.id}`)
   }
 
+  const cardProps = { onDelete: handleDelete, onClick: handleCardClick, onBookmark: handleBookmark, onClearProgress: handleClearProgress }
+
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: '#1a1a1a', color: 'white', display: 'flex', flexDirection: 'column' }}>
-      <AppBar position="static" sx={{ bgcolor: '#111', boxShadow: 'none', borderBottom: '1px solid #333' }}>
+      <AppBar position="static" sx={{ bgcolor: '#111', boxShadow: 'none', borderBottom: '1px solid #222' }}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
             書庫
           </Typography>
-          <Typography variant="body2" sx={{ color: 'grey.400', mr: 2 }}>
+          <Typography variant="body2" sx={{ color: 'grey.400', mr: 1.5 }}>
             {currentUser?.name}
           </Typography>
-          <IconButton
-            color="inherit"
-            onClick={() => fileInputRef.current?.click()}
-            title="上傳書籍"
-            sx={{ gap: 0.5 }}
-          >
-            <UploadFileIcon />
-            <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-              上傳書籍
-            </Typography>
-          </IconButton>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".epub,.pdf,.txt"
-            style={{ display: 'none' }}
-            onChange={handleFileChange}
-          />
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ p: 2, flexGrow: 1 }}>
-        <Grid container spacing={2}>
-          {loading
-            ? Array.from({ length: 8 }).map((_, i) => (
-                <Grid size={{ xs: 6, sm: 4, md: 3 }} key={i}>
-                  <Skeleton variant="rectangular" height={280} sx={{ bgcolor: '#2a2a2a', borderRadius: 1 }} />
-                </Grid>
-              ))
-            : books.map((book) => (
-                <Grid size={{ xs: 6, sm: 4, md: 3 }} key={book.id}>
-                  <BookCard book={book} onDelete={handleDelete} onClick={handleCardClick} />
-                </Grid>
+      <Box sx={{ flexGrow: 1, pt: 3, pb: 10 }}>
+        {loading ? (
+          <Box sx={{ px: 2 }}>
+            <Skeleton variant="text" width={120} height={32} sx={{ bgcolor: '#2a2a2a', mb: 2 }} />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {[1, 2, 3].map(i => (
+                <Skeleton key={i} variant="rectangular" width={160} height={280} sx={{ bgcolor: '#2a2a2a', borderRadius: 1, flexShrink: 0 }} />
               ))}
-          {!loading && books.length === 0 && (
-            <Grid size={{ xs: 12 }}>
-              <Box sx={{ textAlign: 'center', mt: 8, color: 'grey.600' }}>
-                <UploadFileIcon sx={{ fontSize: 64, mb: 2 }} />
-                <Typography variant="h6">書庫是空的</Typography>
-                <Typography variant="body2">點擊右上角上傳書籍</Typography>
+            </Box>
+          </Box>
+        ) : (
+          <>
+            {/* 繼續閱讀 */}
+            {continueReading.length > 0 && (
+              <ScrollRow title="繼續閱讀">
+                {continueReading.map(({ book, percentage }) => (
+                  <Box key={book.id} sx={{ width: 160, flexShrink: 0 }}>
+                    <BookCard {...cardProps} book={book} progressPercent={percentage} bookmarked={bookmarkSet.has(book.id)} showClearProgress />
+                  </Box>
+                ))}
+              </ScrollRow>
+            )}
+
+            {/* 稍後閱讀 */}
+            {readLater.length > 0 && (
+              <ScrollRow title="稍後閱讀">
+                {readLater.map((book) => (
+                  <Box key={book.id} sx={{ width: 160, flexShrink: 0 }}>
+                    <BookCard {...cardProps} book={book} bookmarked />
+                  </Box>
+                ))}
+              </ScrollRow>
+            )}
+
+            {/* 書庫 */}
+            {otherBooks.length > 0 && (
+              <Box sx={{ px: 2 }}>
+                <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
+                  書庫
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
+                  {otherBooks.map((book) => (
+                    <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} />
+                  ))}
+                </Box>
               </Box>
-            </Grid>
-          )}
-        </Grid>
+            )}
+
+            {books.length === 0 && (
+              <Box sx={{ textAlign: 'center', mt: 12, color: 'grey.600' }}>
+                <Typography variant="h6">書庫是空的</Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>點擊右下角 + 上傳書籍</Typography>
+              </Box>
+            )}
+          </>
+        )}
       </Box>
+
+      <input ref={fileInputRef} type="file" accept=".epub,.pdf,.txt" aria-label="上傳書籍" title="上傳書籍" className="hidden-file-input" onChange={handleFileChange} />
+      <Fab
+        color="primary"
+        sx={{ position: 'fixed', bottom: 24, right: 24 }}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <AddIcon />
+      </Fab>
     </Box>
   )
 }

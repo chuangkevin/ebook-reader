@@ -109,6 +109,25 @@ async function updateSettings(userId: string, settings: ReaderSettings): Promise
   })
 }
 
+// Bookmarks
+async function getBookmarks(userId: string): Promise<string[]> {
+  return request<string[]>(`/users/${userId}/bookmarks`)
+}
+
+async function toggleBookmark(userId: string, bookId: string): Promise<void> {
+  return request<void>(`/users/${userId}/books/${bookId}/bookmark`, { method: 'POST' })
+}
+
+// User reading progress (all books)
+async function getUserProgress(userId: string): Promise<Array<{ bookId: string; percentage: number; lastReadAt: number }>> {
+  return request<Array<{ bookId: string; percentage: number; lastReadAt: number }>>(`/users/${userId}/progress`)
+}
+
+// Clear reading progress for a book
+async function clearProgress(userId: string, bookId: string): Promise<void> {
+  return request<void>(`/users/${userId}/books/${bookId}/progress`, { method: 'DELETE' })
+}
+
 export const api = {
   users: {
     list: listUsers,
@@ -121,6 +140,12 @@ export const api = {
     upload: uploadBook,
     remove: removeBook,
     updateProgress,
+    getUserProgress,
+    clearProgress,
+  },
+  bookmarks: {
+    list: getBookmarks,
+    toggle: toggleBookmark,
   },
   settings: {
     get: getSettings,
