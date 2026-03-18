@@ -3,10 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import {
   AppBar,
   Box,
+  Button,
   Card,
   CardActionArea,
   CardContent,
   CardMedia,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Fab,
   IconButton,
   LinearProgress,
@@ -20,6 +26,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
+import SwitchAccountIcon from '@mui/icons-material/SwitchAccount'
 import { useUserStore } from '../stores/userStore'
 import { useBookStore } from '../stores/bookStore'
 import { api } from '../services/api.service'
@@ -55,13 +62,14 @@ interface BookCardProps {
   progressPercent?: number
   bookmarked?: boolean
   showClearProgress?: boolean
+  canDelete?: boolean
   onDelete: (book: Book) => void
   onClick: (book: Book) => void
   onBookmark: (bookId: string) => void
   onClearProgress?: (bookId: string) => void
 }
 
-function BookCard({ book, progressPercent, bookmarked, showClearProgress, onDelete, onClick, onBookmark, onClearProgress }: BookCardProps) {
+function BookCard({ book, progressPercent, bookmarked, showClearProgress, canDelete, onDelete, onClick, onBookmark, onClearProgress }: BookCardProps) {
   const pct = progressPercent ?? parseProgressPercent(book.progress)
 
   return (
@@ -153,15 +161,17 @@ function BookCard({ book, progressPercent, bookmarked, showClearProgress, onDele
               : <BookmarkBorderIcon sx={{ fontSize: 14 }} />}
           </IconButton>
         </Tooltip>
-        <Tooltip title="刪除" placement="left">
-          <IconButton
-            size="small"
-            onClick={(e) => { e.stopPropagation(); onDelete(book) }}
-            sx={{ bgcolor: 'rgba(0,0,0,0.55)', color: 'grey.300', width: 28, height: 28, '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: 'white' } }}
-          >
-            <DeleteIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-        </Tooltip>
+        {canDelete && (
+          <Tooltip title="刪除" placement="left">
+            <IconButton
+              size="small"
+              onClick={(e) => { e.stopPropagation(); onDelete(book) }}
+              sx={{ bgcolor: 'rgba(0,0,0,0.55)', color: 'grey.300', width: 28, height: 28, '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: 'white' } }}
+            >
+              <DeleteIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
     </Card>
   )
@@ -199,7 +209,8 @@ export default function BookLibrary() {
   const { books, setBooks, setCurrentBook } = useBookStore()
   const [loading, setLoading] = useState(true)
   const [bookmarkSet, setBookmarkSet] = useState<Set<string>>(new Set())
-  const [progressMap, setProgressMap] = useState<Map<string, { percentage: number; lastReadAt: number }>>(new Map())
+  const [progressMap, setProgressMap] = useState<Map<string, { cfi: string; percentage: number; lastReadAt: number }>>(new Map())
+  const [confirmBook, setConfirmBook] = useState<Book | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async () => {
@@ -211,9 +222,15 @@ export default function BookLibrary() {
         api.bookmarks.list(currentUser.id),
         api.books.getUserProgress(currentUser.id),
       ])
-      setBooks(booksData)
+      const progMap = new Map(progressData.map(p => [p.bookId, { cfi: p.cfi, percentage: p.percentage, lastReadAt: p.lastReadAt }]))
+      // Merge saved progress (cfi) back into each book so reader can restore position
+      const booksWithProgress = booksData.map(b => {
+        const prog = progMap.get(b.id)
+        return prog ? { ...b, progress: prog.cfi } : b
+      })
+      setBooks(booksWithProgress)
       setBookmarkSet(new Set(bookmarksData))
-      setProgressMap(new Map(progressData.map(p => [p.bookId, { percentage: p.percentage, lastReadAt: p.lastReadAt }])))
+      setProgressMap(progMap)
     } catch {
       // ignore
     } finally {
@@ -225,7 +242,7 @@ export default function BookLibrary() {
 
   // Split books into sections
   const { continueReading, readLater, otherBooks } = useMemo(() => {
-    const reading: Array<{ book: Book; percentage: number; lastReadAt: number }> = []
+    const reading: Array<{ book: Book; percentage: number; lastReadAt: number; }> = []
     const later: Book[] = []
     const other: Book[] = []
 
@@ -257,8 +274,15 @@ export default function BookLibrary() {
   }
 
   async function handleDelete(book: Book) {
+    setConfirmBook(book)
+  }
+
+  async function confirmDelete() {
+    if (!confirmBook || !currentUser) return
+    const book = confirmBook
+    setConfirmBook(null)
     try {
-      await api.books.remove(book.id)
+      await api.books.remove(book.id, currentUser.id)
       setBooks(books.filter((b) => b.id !== book.id))
       setProgressMap(prev => { const m = new Map(prev); m.delete(book.id); return m })
     } catch {
@@ -296,6 +320,7 @@ export default function BookLibrary() {
   }
 
   const cardProps = { onDelete: handleDelete, onClick: handleCardClick, onBookmark: handleBookmark, onClearProgress: handleClearProgress }
+  const isUploader = (book: Book) => !!currentUser && book.uploadedBy === currentUser.id
 
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: '#1a1a1a', color: 'white', display: 'flex', flexDirection: 'column' }}>
@@ -304,9 +329,14 @@ export default function BookLibrary() {
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
             書庫
           </Typography>
-          <Typography variant="body2" sx={{ color: 'grey.400', mr: 1.5 }}>
+          <Typography variant="body2" sx={{ color: 'grey.400', mr: 0.5 }}>
             {currentUser?.name}
           </Typography>
+          <Tooltip title="切換使用者">
+            <IconButton color="inherit" size="small" onClick={() => navigate('/')}>
+              <SwitchAccountIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Toolbar>
       </AppBar>
 
@@ -326,8 +356,8 @@ export default function BookLibrary() {
             {continueReading.length > 0 && (
               <ScrollRow title="繼續閱讀">
                 {continueReading.map(({ book, percentage }) => (
-                  <Box key={book.id} sx={{ width: 160, flexShrink: 0 }}>
-                    <BookCard {...cardProps} book={book} progressPercent={percentage} bookmarked={bookmarkSet.has(book.id)} showClearProgress />
+                  <Box key={book.id} sx={{ width: { xs: '42vw', sm: 160 }, minWidth: 130, maxWidth: 200, flexShrink: 0 }}>
+                    <BookCard {...cardProps} book={book} progressPercent={percentage} bookmarked={bookmarkSet.has(book.id)} showClearProgress canDelete={isUploader(book)} />
                   </Box>
                 ))}
               </ScrollRow>
@@ -337,8 +367,8 @@ export default function BookLibrary() {
             {readLater.length > 0 && (
               <ScrollRow title="稍後閱讀">
                 {readLater.map((book) => (
-                  <Box key={book.id} sx={{ width: 160, flexShrink: 0 }}>
-                    <BookCard {...cardProps} book={book} bookmarked />
+                  <Box key={book.id} sx={{ width: { xs: '42vw', sm: 160 }, minWidth: 130, maxWidth: 200, flexShrink: 0 }}>
+                    <BookCard {...cardProps} book={book} bookmarked canDelete={isUploader(book)} />
                   </Box>
                 ))}
               </ScrollRow>
@@ -352,7 +382,7 @@ export default function BookLibrary() {
                 </Typography>
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
                   {otherBooks.map((book) => (
-                    <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} />
+                    <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
                   ))}
                 </Box>
               </Box>
@@ -376,6 +406,19 @@ export default function BookLibrary() {
       >
         <AddIcon />
       </Fab>
+
+      <Dialog open={!!confirmBook} onClose={() => setConfirmBook(null)}>
+        <DialogTitle>確認刪除</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            確定要刪除《{confirmBook?.title}》嗎？此操作無法復原。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmBook(null)}>取消</Button>
+          <Button onClick={confirmDelete} color="error" variant="contained">刪除</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

@@ -32,13 +32,20 @@ interface EpubReaderProps {
   initialProgress?: string
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number
+  theme?: 'light' | 'sepia' | 'dark'
   tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
   openccMode?: 'none' | 'tw2s' | 's2tw'
   onProgressChange: (progress: string) => void
   onTocLoad?: (toc: any[]) => void
 }
 
-function injectWritingMode(doc: Document, writingMode: string, fontSize: number) {
+const THEME_CSS: Record<string, string> = {
+  light: 'background-color: #ffffff !important; color: #000000 !important;',
+  sepia: 'background-color: #f5ecd7 !important; color: #3d2b1f !important;',
+  dark: 'background-color: #1a1a1a !important; color: #e0e0e0 !important;',
+}
+
+function injectStyles(doc: Document, writingMode: string, fontSize: number, theme: string) {
   if (!doc?.head) return
   let style = doc.getElementById('__wm') as HTMLStyleElement | null
   if (!style) {
@@ -46,7 +53,8 @@ function injectWritingMode(doc: Document, writingMode: string, fontSize: number)
     style.id = '__wm'
     doc.head.appendChild(style)
   }
-  style.textContent = `html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px; }`
+  const themeCss = THEME_CSS[theme] ?? THEME_CSS.light
+  style.textContent = `html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; ${themeCss} }`
 }
 
 function parseProgress(progress?: string): { chapterIndex: number; scrollFraction: number } | null {
@@ -57,35 +65,38 @@ function parseProgress(progress?: string): { chapterIndex: number; scrollFractio
 }
 
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', openccMode = 'none', onProgressChange, onTocLoad }, ref) => {
+  ({ bookId, initialProgress, writingMode, fontSize, theme = 'light', tapZoneLayout = 'default', openccMode = 'none', onProgressChange, onTocLoad }, ref) => {
     const paginatorRef = useRef<HTMLElement>(null)
     const bookRef = useRef<any>(null)
     const currentProgressRef = useRef<{ index: number; anchor: number } | null>(null)
+    const currentAnchorTextRef = useRef<string>('')  // layout-independent text marker for mode switch
     const totalSectionsRef = useRef(0)
     const modeSwitchingRef = useRef(false)
     // Keep latest values accessible in event listeners without re-running effect
     const writingModeRef = useRef(writingMode)
     const fontSizeRef = useRef(fontSize)
+    const themeRef = useRef(theme)
     const openccModeRef = useRef(openccMode)
     const onProgressChangeRef = useRef(onProgressChange)
 
     useEffect(() => { writingModeRef.current = writingMode }, [writingMode])
     useEffect(() => { fontSizeRef.current = fontSize }, [fontSize])
+    useEffect(() => { themeRef.current = theme }, [theme])
     useEffect(() => { openccModeRef.current = openccMode }, [openccMode])
     useEffect(() => { onProgressChangeRef.current = onProgressChange }, [onProgressChange])
 
-    // Re-inject CSS when fontSize/openccMode changes (no position reset needed)
+    // Re-inject CSS when fontSize/theme/openccMode changes (no position reset needed)
     useEffect(() => {
       const paginator = paginatorRef.current as any
       if (!paginator) return
       try {
         const contents = paginator.getContents?.() ?? []
         for (const { doc } of contents) {
-          if (doc) injectWritingMode(doc, writingMode, fontSize)
+          if (doc) injectStyles(doc, writingModeRef.current, fontSize, theme)
         }
       } catch { /* paginator may not be initialized yet */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fontSize, openccMode])
+    }, [fontSize, theme, openccMode])
 
     // Re-open book when writingMode changes so paginator reflows with correct layout
     useEffect(() => {
@@ -95,14 +106,47 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       const pos = currentProgressRef.current
       if (!pos) return  // not yet initialized, skip
 
+      // Capture text marker BEFORE open() destroys the current iframe
+      const anchorText = currentAnchorTextRef.current
       modeSwitchingRef.current = true
       ;(async () => {
         try {
-          // writingModeRef is already updated (line 71), so handleLoad will inject new CSS
           paginator.open(book)
-          await paginator.next()  // render first page
-          await paginator.goTo({ index: pos.index, anchor: pos.anchor })
-        } catch { /* ignore */ }
+          // Navigate to an adjacent section first. This changes paginator's internal #index so
+          // the subsequent goTo(pos.index) uses the "different section" code path, which reloads
+          // the iframe and calls #beforeRender({vertical, rtl}). #beforeRender reads the computed
+          // writing-mode CSS (including our injected CSS) via getDirection(), updating Paginator.#vertical.
+          // Without this, the "same section" path is taken (no iframe reload, stale #vertical from
+          // the previous writing mode), causing Range client rects to use the wrong axis mapper and
+          // scroll to page 1 (chapter start) instead of the correct position.
+          const totalSections = totalSectionsRef.current
+          const adjacentIdx = pos.index > 0 ? pos.index - 1 : Math.min(pos.index + 1, totalSections - 1)
+          await paginator.goTo({ index: adjacentIdx, anchor: 0 })
+
+          // Build a text-search anchor: finds the first 25 chars of saved text in the new doc.
+          // Because the section is freshly loaded, Paginator.#vertical now reflects the new writing
+          // mode, so the Range's client rects are processed by the correct rect mapper.
+          // Fallback to pos.anchor (stored fraction) if text is not found.
+          const anchor = anchorText
+            ? (doc: Document) => {
+                const search = anchorText.slice(0, 25)
+                const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+                let node: Node | null
+                while ((node = walker.nextNode())) {
+                  const idx = (node.textContent ?? '').indexOf(search)
+                  if (idx >= 0) {
+                    const range = doc.createRange()
+                    range.setStart(node, idx)
+                    range.setEnd(node, idx + search.length)
+                    return range
+                  }
+                }
+                return pos.anchor  // fallback: use stored fraction
+              }
+            : pos.anchor
+          await paginator.goTo({ index: pos.index, anchor })
+        } catch (e) { console.error('[ModeSwitch] error:', e) }
+        // Keep mode switch lock a bit longer so first user tap doesn't race
         setTimeout(() => { modeSwitchingRef.current = false }, 500)
       })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,7 +180,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           function handleLoad(e: CustomEvent) {
             const doc: Document = e.detail?.doc
             if (doc) {
-              injectWritingMode(doc, writingModeRef.current, fontSizeRef.current)
+              injectStyles(doc, writingModeRef.current, fontSizeRef.current, themeRef.current)
               if (openccModeRef.current !== 'none') {
                 convertDoc(doc, openccModeRef.current)
               }
@@ -144,13 +188,18 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           }
 
           function handleRelocate(e: CustomEvent) {
-            const { fraction, index } = e.detail ?? {}
+            const { fraction, index, range } = e.detail ?? {}
+            // Save the first visible text as a layout-independent position marker
+            if (range?.toString) {
+              const text = range.toString().trim().slice(0, 50)
+              if (text) currentAnchorTextRef.current = text
+            }
             // Inject CSS to all currently loaded iframes
             try {
               const contents = paginator.getContents?.() ?? []
               for (const { doc } of contents) {
                 if (doc) {
-                  injectWritingMode(doc, writingModeRef.current, fontSizeRef.current)
+                  injectStyles(doc, writingModeRef.current, fontSizeRef.current, themeRef.current)
                   if (openccModeRef.current !== 'none') {
                     convertDoc(doc, openccModeRef.current)
                   }
@@ -194,7 +243,6 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       return () => {
         destroyed = true
         bookRef.current = null
-        // Remove event listeners — paginator element persists in DOM so clean up
         try {
           paginator.removeEventListener('load', () => {})
           paginator.removeEventListener('relocate', () => {})
@@ -205,16 +253,17 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
 
     useImperativeHandle(ref, () => ({
       next: async () => {
+        if (modeSwitchingRef.current) return  // block during mode switch
         try { await (paginatorRef.current as any)?.next?.() } catch { /* ignore */ }
       },
       prev: async () => {
+        if (modeSwitchingRef.current) return  // block during mode switch
         try { await (paginatorRef.current as any)?.prev?.() } catch { /* ignore */ }
       },
       goTo: async (href: string) => {
         try {
           const paginator = paginatorRef.current as any
           if (!paginator) return
-          // Resolve href → { index, anchor } via the book object
           const book = bookRef.current
           if (book?.resolveHref) {
             const location = await book.resolveHref(href)
@@ -226,9 +275,8 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       },
     }))
 
-    const paginatorEl = paginatorRef.current as any
-    const onNext = () => paginatorEl?.next?.()
-    const onPrev = () => paginatorEl?.prev?.()
+    const onNext = () => { if (!modeSwitchingRef.current) (paginatorRef.current as any)?.next?.() }
+    const onPrev = () => { if (!modeSwitchingRef.current) (paginatorRef.current as any)?.prev?.() }
 
     return (
       <div className="epub-reader-root">

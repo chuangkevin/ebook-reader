@@ -18,7 +18,7 @@ test.beforeEach(async () => {
 })
 
 test.afterEach(async () => {
-  if (testBook) await deleteBook(testBook.id).catch(() => {})
+  if (testBook) await deleteBook(testBook.id, testUser?.id).catch(() => {})
   if (testUser) await deleteUser(testUser.id).catch(() => {})
 })
 

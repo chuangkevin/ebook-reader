@@ -83,11 +83,17 @@ class BookController {
 
   async delete(req: Request, res: Response): Promise<void> {
     try {
-      const deleted = bookService.delete(req.params.id);
-      if (!deleted) {
+      const requestedBy = req.query.requestedBy as string | undefined;
+      const book = bookService.getById(req.params.id);
+      if (!book) {
         res.status(404).json({ error: 'Book not found' });
         return;
       }
+      if (!requestedBy || book.uploadedBy !== requestedBy) {
+        res.status(403).json({ error: '只有上傳者可以刪除此書籍' });
+        return;
+      }
+      bookService.delete(req.params.id);
       res.json({ message: 'Book deleted' });
     } catch (error) {
       logger.error('Failed to delete book:', error);

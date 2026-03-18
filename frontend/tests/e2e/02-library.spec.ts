@@ -30,7 +30,7 @@ test.describe('書庫', () => {
 
   test.afterEach(async () => {
     // 先刪書（避免外鍵殘留），再刪使用者
-    await deleteBook(testBook.id)
+    await deleteBook(testBook.id, testUser.id).catch(() => {})
     await deleteUser(testUser.id)
     await cleanupUsersWithPrefix(PREFIX)
   })
@@ -54,10 +54,8 @@ test.describe('書庫', () => {
 
   test('書庫顯示上傳按鈕', async ({ page }) => {
     await navigateToLibrary(page)
-    // Toolbar 上有 UploadFileIcon 旁的「上傳書籍」文字（桌面寬度）
-    const uploadBtn = page
-      .locator('svg[data-testid="UploadFileIcon"]')
-      .locator('..')
+    // 右下角 FAB 上有 AddIcon
+    const uploadBtn = page.locator('svg[data-testid="AddIcon"]').locator('..')
     await expect(uploadBtn).toBeVisible()
     await page.screenshot({ path: 'test-results/02-upload-btn.png' })
   })
@@ -69,20 +67,27 @@ test.describe('書庫', () => {
     await page.screenshot({ path: 'test-results/02-enter-reader.png' })
   })
 
-  test('可以刪除書籍', async ({ page }) => {
+  test('可以刪除書籍（需確認）', async ({ page }) => {
     await navigateToLibrary(page)
 
-    // 書卡右上角的 DeleteIcon 按鈕
+    // 書卡右上角的 DeleteIcon 按鈕（只有上傳者才看得到）
     const bookCard = page.locator('.MuiCard-root').filter({ hasText: testBook.title })
     const deleteBtn = bookCard.locator('svg[data-testid="DeleteIcon"]').locator('..')
     await expect(deleteBtn).toBeVisible()
     await deleteBtn.click()
 
+    // 確認 Dialog 出現
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByText('確認刪除')).toBeVisible()
+
+    // 點確認刪除
+    await page.getByRole('button', { name: '刪除' }).click()
+
     // 書籍應從列表消失
-    await expect(page.getByText(testBook.title)).not.toBeVisible()
+    await expect(page.getByText(testBook.title)).not.toBeVisible({ timeout: 5000 })
     await page.screenshot({ path: 'test-results/02-delete-book.png' })
 
-    // 後端已刪除，afterEach 刪除時 404 視為成功，不用擔心
+    // 後端已刪除，afterEach 刪除時 404 視為成功
   })
 
   test('書庫工具列顯示使用者名稱', async ({ page }) => {
@@ -90,8 +95,8 @@ test.describe('書庫', () => {
 
     // AppBar 右側顯示當前使用者名稱
     await expect(page.getByText(testUser.name)).toBeVisible()
-    // 也應有書庫標題
-    await expect(page.getByText('書庫')).toBeVisible()
+    // AppBar 中的書庫標題（用 role 精確定位）
+    await expect(page.getByRole('banner').getByText('書庫')).toBeVisible()
     await page.screenshot({ path: 'test-results/02-library-header.png' })
   })
 })

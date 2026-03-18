@@ -118,8 +118,11 @@ export async function cleanupBookByTitle(title: string): Promise<void> {
   }
 }
 
-export async function deleteBook(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/books/${id}`, { method: 'DELETE' })
+export async function deleteBook(id: string, uploadedBy?: string): Promise<void> {
+  const url = uploadedBy
+    ? `${API_BASE}/books/${id}?requestedBy=${encodeURIComponent(uploadedBy)}`
+    : `${API_BASE}/books/${id}`
+  const res = await fetch(url, { method: 'DELETE' })
   if (!res.ok && res.status !== 404) {
     throw new Error(`deleteBook(${id}) failed (${res.status})`)
   }

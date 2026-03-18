@@ -12,6 +12,7 @@ export interface Book {
   coverUrl?: string
   progress?: string  // "@@chapterIndex@@scrollFraction" format
   addedAt: string
+  uploadedBy?: string
 }
 
 export interface ReadingProgress {

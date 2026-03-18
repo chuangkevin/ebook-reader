@@ -202,7 +202,15 @@ export default function ReaderPage() {
       </AppBar>
 
       {/* Reader area */}
-      <Box ref={readerAreaRef} sx={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}>
+      <Box
+        ref={readerAreaRef}
+        sx={{
+          flexGrow: 1,
+          overflow: 'hidden',
+          position: 'relative',
+          bgcolor: settings.theme === 'dark' ? '#1a1a1a' : settings.theme === 'sepia' ? '#f5ecd7' : '#ffffff',
+        }}
+      >
         {format === 'epub' && (
           <EpubReader
             ref={readerRef as React.Ref<EpubReaderHandle>}
@@ -211,6 +219,7 @@ export default function ReaderPage() {
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}
             fontSize={settings.fontSize}
+            theme={settings.theme}
             tapZoneLayout={settings.tapZoneLayout}
             openccMode={settings.openccMode}
             onProgressChange={handleProgressChange}

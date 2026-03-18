@@ -41,6 +41,7 @@ function normalizeBook(raw: any): Book {
     coverUrl: `/api/books/${raw.id}/cover`,
     progress: raw.progress,
     addedAt: raw.uploadedAt ? String(raw.uploadedAt) : '',
+    uploadedBy: raw.uploadedBy,
   }
 }
 
@@ -66,8 +67,8 @@ async function uploadBook(file: File, userId: string): Promise<Book> {
   return normalizeBook(raw)
 }
 
-async function removeBook(bookId: string): Promise<void> {
-  return request<void>(`/books/${bookId}`, { method: 'DELETE' })
+async function removeBook(bookId: string, userId: string): Promise<void> {
+  return request<void>(`/books/${bookId}?requestedBy=${encodeURIComponent(userId)}`, { method: 'DELETE' })
 }
 
 async function updateProgress(userId: string, bookId: string, progress: string, format: string): Promise<void> {
@@ -88,6 +89,7 @@ async function updateProgress(userId: string, bookId: string, progress: string, 
     } else {
       percentage = Math.round(second * 100)
     }
+    percentage = Math.min(100, Math.max(0, percentage))
   }
   return request<void>(`/users/${userId}/books/${bookId}/progress`, {
     method: 'PUT',
@@ -119,8 +121,8 @@ async function toggleBookmark(userId: string, bookId: string): Promise<void> {
 }
 
 // User reading progress (all books)
-async function getUserProgress(userId: string): Promise<Array<{ bookId: string; percentage: number; lastReadAt: number }>> {
-  return request<Array<{ bookId: string; percentage: number; lastReadAt: number }>>(`/users/${userId}/progress`)
+async function getUserProgress(userId: string): Promise<Array<{ bookId: string; cfi: string; percentage: number; lastReadAt: number }>> {
+  return request<Array<{ bookId: string; cfi: string; percentage: number; lastReadAt: number }>>(`/users/${userId}/progress`)
 }
 
 // Clear reading progress for a book
