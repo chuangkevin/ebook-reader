@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AppBar, Box, IconButton, Toolbar, Typography } from '@mui/material'
+import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
@@ -22,6 +22,7 @@ export default function ReaderPage() {
   const { bookId } = useParams<{ bookId: string }>()
   const navigate = useNavigate()
   const currentBook = useBookStore((s) => s.currentBook)
+  const setCurrentBook = useBookStore((s) => s.setCurrentBook)
   const updateBookProgress = useBookStore((s) => s.updateBookProgress)
   const currentUser = useUserStore((s) => s.currentUser)
   const { settings, setSettings } = useSettingsStore()
@@ -33,6 +34,7 @@ export default function ReaderPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tocOpen, setTocOpen] = useState(false)
   const [toc, setToc] = useState<TocItem[]>([])
+  const [bookLoading, setBookLoading] = useState(false)
 
   useSwipeNavigation(
     readerAreaRef,
@@ -40,12 +42,22 @@ export default function ReaderPage() {
     () => readerRef.current?.prev(),
   )
 
-  // Redirect if no book or user
+  // If no user, redirect to user selection
   useEffect(() => {
-    if (!currentBook || !currentUser) {
+    if (!currentUser) {
       navigate('/')
     }
-  }, [currentBook, currentUser, navigate])
+  }, [currentUser, navigate])
+
+  // If no book in store but bookId in URL, fetch it from API
+  useEffect(() => {
+    if (!currentUser || !bookId || currentBook) return
+    setBookLoading(true)
+    api.books.get(bookId)
+      .then((book) => { setCurrentBook(book) })
+      .catch(() => { navigate('/library') })
+      .finally(() => { setBookLoading(false) })
+  }, [currentUser, bookId, currentBook, setCurrentBook, navigate])
 
   // Load settings from API on mount
   useEffect(() => {
@@ -109,7 +121,12 @@ export default function ReaderPage() {
     [currentUser, currentBook, updateBookProgress]
   )
 
-  if (!currentBook || !currentUser) return null
+  if (!currentUser) return null
+  if (bookLoading || !currentBook) return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', bgcolor: '#111' }}>
+      <CircularProgress sx={{ color: '#fff' }} />
+    </Box>
+  )
 
   const bookIdStr = bookId ?? ''
   const format = currentBook.format

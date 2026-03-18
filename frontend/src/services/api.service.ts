@@ -35,6 +35,10 @@ async function listBooks(_userId: string): Promise<Book[]> {
   return request<Book[]>('/books')
 }
 
+async function getBook(bookId: string): Promise<Book> {
+  return request<Book>(`/books/${bookId}`)
+}
+
 async function uploadBook(file: File, userId: string): Promise<Book> {
   const formData = new FormData()
   formData.append('file', file)
@@ -93,6 +97,7 @@ export const api = {
   },
   books: {
     list: listBooks,
+    get: getBook,
     upload: uploadBook,
     remove: removeBook,
     updateProgress,
