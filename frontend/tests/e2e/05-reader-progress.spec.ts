@@ -6,7 +6,7 @@ import { createUser, deleteUser, uploadBook, deleteBook } from '../helpers/testD
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const TEST_EPUB = path.resolve(__dirname, '../../../spike/test.epub')
+const TEST_EPUB = path.resolve(__dirname, '../../../ebook/哈利波特一_神秘的魔法石.epub')
 const API_BASE = 'http://localhost:3003/api'
 
 let testUser: any

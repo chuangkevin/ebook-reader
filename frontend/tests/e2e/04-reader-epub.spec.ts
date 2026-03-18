@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename)
  * EPUB 閱讀器整合測試（真實後端 + 真實 EPUB）
  */
 
-const TEST_EPUB = path.resolve(__dirname, '../../../spike/test.epub')
+const TEST_EPUB = path.resolve(__dirname, '../../../ebook/哈利波特一_神秘的魔法石.epub')
 
 let testUser: any
 let testBook: any
