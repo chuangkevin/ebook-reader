@@ -96,17 +96,21 @@ export default function ReaderPage() {
       if (!currentUser || !currentBook) return
 
       // Parse fraction for display
-      // PDF:  @@pageNum@@totalPages   -> pageNum/totalPages
-      // EPUB: @@chapterIndex@@scrollFraction  -> scrollFraction (0-1)
-      // TXT:  @@scrollFraction@@1    -> scrollFraction (0-1)
+      // PDF:  @@pageNum@@totalPages             -> pageNum/totalPages
+      // EPUB: @@chapterIndex@@sectionFraction@@totalSections -> (chapterIndex+sectionFraction)/totalSections
+      // TXT:  @@scrollFraction@@1               -> scrollFraction (0-1)
       const parts = progress.split('@@').filter(Boolean)
       if (parts.length >= 2) {
         const first = parseFloat(parts[0])
         const second = parseFloat(parts[1])
+        const third = parts.length >= 3 ? parseFloat(parts[2]) : 0
         if (currentBook.format === 'pdf' && second > 0) {
           setProgressPercent(Math.round((first / second) * 100))
         } else if (currentBook.format === 'txt') {
           setProgressPercent(Math.round(first * 100))
+        } else if (third > 0) {
+          // EPUB: book-wide progress = (chapterIndex + sectionFraction) / totalSections
+          setProgressPercent(Math.round(((first + second) / third) * 100))
         } else {
           setProgressPercent(Math.round(second * 100))
         }

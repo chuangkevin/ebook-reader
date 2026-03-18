@@ -72,16 +72,19 @@ async function removeBook(bookId: string): Promise<void> {
 
 async function updateProgress(userId: string, bookId: string, progress: string, format: string): Promise<void> {
   // Parse progress string to cfi + percentage
-  // EPUB: @@chapterIndex@@scrollFraction  -> percentage = scrollFraction * 100
-  // PDF:  @@page@@totalPages              -> percentage = page/total * 100
-  // TXT:  @@scrollFraction@@1             -> percentage = scrollFraction * 100
+  // EPUB: @@chapterIndex@@sectionFraction@@totalSections -> (chapterIndex+sectionFraction)/totalSections * 100
+  // PDF:  @@page@@totalPages                            -> page/total * 100
+  // TXT:  @@scrollFraction@@1                           -> scrollFraction * 100
   const parts = progress.split('@@').filter(Boolean)
   let percentage = 0
   if (parts.length >= 2) {
     const first = parseFloat(parts[0])
     const second = parseFloat(parts[1])
+    const third = parts.length >= 3 ? parseFloat(parts[2]) : 0
     if (format === 'pdf' && second > 0) {
       percentage = Math.round((first / second) * 100)
+    } else if (format !== 'pdf' && third > 0) {
+      percentage = Math.round(((first + second) / third) * 100)
     } else {
       percentage = Math.round(second * 100)
     }

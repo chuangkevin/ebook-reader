@@ -61,6 +61,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
     const paginatorRef = useRef<HTMLElement>(null)
     const bookRef = useRef<any>(null)
     const currentProgressRef = useRef<{ index: number; anchor: number } | null>(null)
+    const totalSectionsRef = useRef(0)
     const modeSwitchingRef = useRef(false)
     // Keep latest values accessible in event listeners without re-running effect
     const writingModeRef = useRef(writingMode)
@@ -129,6 +130,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           if (destroyed) return
 
           bookRef.current = book
+          totalSectionsRef.current = book.sections?.length ?? 0
           onTocLoad?.(book.toc ?? [])
 
           function handleLoad(e: CustomEvent) {
@@ -160,7 +162,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
               currentProgressRef.current = { index, anchor: fraction }
               // Suppress progress saves during mode switching to avoid overwriting with reset position
               if (!modeSwitchingRef.current) {
-                onProgressChangeRef.current(`@@${index}@@${fraction}`)
+                onProgressChangeRef.current(`@@${index}@@${fraction}@@${totalSectionsRef.current}`)
               }
             }
           }
