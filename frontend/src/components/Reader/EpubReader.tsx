@@ -86,30 +86,24 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fontSize, openccMode])
 
-    // Re-inject CSS when writingMode changes; restore position since layout recalculation resets it
+    // Re-open book when writingMode changes so paginator reflows with correct layout
     useEffect(() => {
       const paginator = paginatorRef.current as any
-      if (!paginator) return
+      const book = bookRef.current
+      if (!paginator || !book) return
       const pos = currentProgressRef.current
       if (!pos) return  // not yet initialized, skip
-      // Suppress progress events during mode switch + restore window
+
       modeSwitchingRef.current = true
-      try {
-        const contents = paginator.getContents?.() ?? []
-        for (const { doc } of contents) {
-          if (doc) injectWritingMode(doc, writingMode, fontSize)
-        }
-        // After writing mode change, restore the current reading position
-        setTimeout(async () => {
-          try {
-            await paginator.goTo({ index: pos.index, anchor: pos.anchor })
-          } catch { /* ignore */ }
-          // Resume progress reporting after position is restored
-          setTimeout(() => { modeSwitchingRef.current = false }, 800)
-        }, 300)
-      } catch {
-        modeSwitchingRef.current = false
-      }
+      ;(async () => {
+        try {
+          // writingModeRef is already updated (line 71), so handleLoad will inject new CSS
+          paginator.open(book)
+          await paginator.next()  // render first page
+          await paginator.goTo({ index: pos.index, anchor: pos.anchor })
+        } catch { /* ignore */ }
+        setTimeout(() => { modeSwitchingRef.current = false }, 500)
+      })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [writingMode])
 

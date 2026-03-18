@@ -30,23 +30,40 @@ async function removeUser(id: string): Promise<void> {
   return request<void>(`/users/${id}`, { method: 'DELETE' })
 }
 
+// Normalize backend book response: backend returns coverPath (absolute path),
+// frontend expects coverUrl (/api/books/:id/cover)
+function normalizeBook(raw: any): Book {
+  return {
+    id: raw.id,
+    title: raw.title,
+    author: raw.author,
+    format: raw.format,
+    coverUrl: `/api/books/${raw.id}/cover`,
+    progress: raw.progress,
+    addedAt: raw.uploadedAt ? String(raw.uploadedAt) : '',
+  }
+}
+
 // Books
 async function listBooks(_userId: string): Promise<Book[]> {
-  return request<Book[]>('/books')
+  const raw = await request<any[]>('/books')
+  return raw.map(normalizeBook)
 }
 
 async function getBook(bookId: string): Promise<Book> {
-  return request<Book>(`/books/${bookId}`)
+  const raw = await request<any>(`/books/${bookId}`)
+  return normalizeBook(raw)
 }
 
 async function uploadBook(file: File, userId: string): Promise<Book> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('uploadedBy', String(userId))
-  return request<Book>('/books', {
+  const raw = await request<any>('/books', {
     method: 'POST',
     body: formData,
   })
+  return normalizeBook(raw)
 }
 
 async function removeBook(bookId: string): Promise<void> {
