@@ -59,10 +59,35 @@ export function initDatabase(): void {
   `);
 
   // Migration: add format column if missing
-  const booksInfo = db.pragma('table_info(books)') as Array<{ name: string }>;
+  const booksInfo = db.pragma('table_info(books)') as Array<{ name: string; notnull: number }>;
   if (!booksInfo.some(col => col.name === 'format')) {
     db.exec(`ALTER TABLE books ADD COLUMN format TEXT NOT NULL DEFAULT 'epub'`);
     console.log('Added format column to books table');
+  }
+
+  // Migration: make uploaded_by nullable so user deletion doesn't violate NOT NULL
+  // (better-sqlite3 v9+ enables FK enforcement by default; ON DELETE SET NULL conflicts with NOT NULL)
+  const uploadedByCol = booksInfo.find(col => col.name === 'uploaded_by');
+  if (uploadedByCol && (uploadedByCol as any).notnull === 1) {
+    db.exec(`DROP TABLE IF EXISTS books_new`);
+    db.exec(`
+      CREATE TABLE books_new (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        author TEXT DEFAULT 'Unknown',
+        format TEXT NOT NULL DEFAULT 'epub',
+        cover_path TEXT,
+        file_path TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        uploaded_by TEXT,
+        uploaded_at INTEGER NOT NULL,
+        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    db.exec(`INSERT INTO books_new SELECT * FROM books`);
+    db.exec(`DROP TABLE books`);
+    db.exec(`ALTER TABLE books_new RENAME TO books`);
+    console.log('Migrated books.uploaded_by to nullable');
   }
 
   // Reading progress table
