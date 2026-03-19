@@ -73,7 +73,7 @@ export default function UserSelectionScreen() {
     }
   }
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     setDeletingId(id)
     try {
