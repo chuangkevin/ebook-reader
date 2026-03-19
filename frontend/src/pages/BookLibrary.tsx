@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AppBar,
+  Avatar,
   Box,
   Button,
   Card,
@@ -13,10 +14,12 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Drawer,
   Fab,
   IconButton,
   LinearProgress,
   Skeleton,
+  TextField,
   Tooltip,
   Toolbar,
   Typography,
@@ -26,6 +29,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
+import PersonIcon from '@mui/icons-material/Person'
 import SwitchAccountIcon from '@mui/icons-material/SwitchAccount'
 import { useUserStore } from '../stores/userStore'
 import { useBookStore } from '../stores/bookStore'
@@ -36,6 +40,12 @@ import type { Book } from '../types/index'
 function parseProgressPercent(progress?: string): number {
   if (!progress) return 0
   const parts = progress.split('@@').filter(Boolean)
+  // New format: @@index@@fraction@@totalSections@@weightedFraction
+  if (parts.length >= 4) {
+    const weighted = parseFloat(parts[3])
+    if (!isNaN(weighted)) return Math.min(100, Math.max(0, Math.round(weighted * 100)))
+  }
+  // Old format: @@index@@fraction@@totalSections
   if (parts.length >= 3) {
     const idx = parseFloat(parts[0])
     const frac = parseFloat(parts[1])
@@ -206,11 +216,16 @@ function ScrollRow({ title, children }: { title: string; children: React.ReactNo
 export default function BookLibrary() {
   const navigate = useNavigate()
   const currentUser = useUserStore((s) => s.currentUser)
+  const setCurrentUser = useUserStore((s) => s.setCurrentUser)
   const { books, setBooks, setCurrentBook } = useBookStore()
   const [loading, setLoading] = useState(true)
   const [bookmarkSet, setBookmarkSet] = useState<Set<string>>(new Set())
   const [progressMap, setProgressMap] = useState<Map<string, { cfi: string; percentage: number; lastReadAt: number }>>(new Map())
   const [confirmBook, setConfirmBook] = useState<Book | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [profileName, setProfileName] = useState('')
+  const [profileColor, setProfileColor] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async () => {
@@ -322,6 +337,26 @@ export default function BookLibrary() {
   const cardProps = { onDelete: handleDelete, onClick: handleCardClick, onBookmark: handleBookmark, onClearProgress: handleClearProgress }
   const isUploader = (book: Book) => !!currentUser && book.uploadedBy === currentUser.id
 
+  const PROFILE_COLORS = ['#5c6bc0', '#42a5f5', '#26a69a', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#8d6e63']
+
+  function openProfile() {
+    if (!currentUser) return
+    setProfileName(currentUser.name)
+    setProfileColor((currentUser as any).avatarColor ?? PROFILE_COLORS[0])
+    setProfileOpen(true)
+  }
+
+  async function saveProfile() {
+    if (!currentUser || !profileName.trim()) return
+    setProfileSaving(true)
+    try {
+      const updated = await api.users.update(currentUser.id, profileName.trim(), profileColor)
+      setCurrentUser({ ...currentUser, name: updated.name, avatar: profileColor })
+    } catch { /* ignore */ }
+    setProfileSaving(false)
+    setProfileOpen(false)
+  }
+
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: '#1a1a1a', color: 'white', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" sx={{ bgcolor: '#111', boxShadow: 'none', borderBottom: '1px solid #222' }}>
@@ -419,6 +454,86 @@ export default function BookLibrary() {
           <Button onClick={confirmDelete} color="error" variant="contained">刪除</Button>
         </DialogActions>
       </Dialog>
+
+      {/* PROFILE 按鈕 */}
+      <Button
+        variant="outlined"
+        startIcon={<PersonIcon />}
+        onClick={openProfile}
+        sx={{
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          borderRadius: 8,
+          px: 4,
+          py: 1,
+          bgcolor: 'rgba(0,0,0,0.6)',
+          color: '#fff',
+          borderColor: 'rgba(255,255,255,0.2)',
+          '&:hover': { bgcolor: 'rgba(0,0,0,0.8)', borderColor: 'rgba(255,255,255,0.4)' },
+          zIndex: 10,
+        }}
+      >
+        個人設定
+      </Button>
+
+      {/* 個人設定 Drawer */}
+      <Drawer
+        anchor="bottom"
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        PaperProps={{
+          sx: {
+            borderTopLeftRadius: 12,
+            borderTopRightRadius: 12,
+            px: 3,
+            py: 3,
+            maxHeight: '50%',
+          },
+        }}
+      >
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>個人設定</Typography>
+
+        <TextField
+          label="名稱"
+          value={profileName}
+          onChange={(e) => setProfileName(e.target.value)}
+          error={!profileName.trim()}
+          helperText={!profileName.trim() ? '名稱不可為空' : ''}
+          fullWidth
+          sx={{ mb: 3 }}
+        />
+
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>頭像顏色</Typography>
+        <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
+          {PROFILE_COLORS.map((color) => (
+            <Avatar
+              key={color}
+              sx={{
+                bgcolor: color,
+                width: 40,
+                height: 40,
+                cursor: 'pointer',
+                border: profileColor === color ? '3px solid #fff' : '3px solid transparent',
+                boxShadow: profileColor === color ? `0 0 0 2px ${color}` : 'none',
+              }}
+              onClick={() => setProfileColor(color)}
+            >
+              {profileColor === color ? '✓' : ''}
+            </Avatar>
+          ))}
+        </Box>
+
+        <Button
+          variant="contained"
+          onClick={saveProfile}
+          disabled={!profileName.trim() || profileSaving}
+          fullWidth
+        >
+          {profileSaving ? '儲存中...' : '儲存'}
+        </Button>
+      </Drawer>
     </Box>
   )
 }

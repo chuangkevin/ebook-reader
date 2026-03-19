@@ -125,9 +125,17 @@ export function initDatabase(): void {
       font_size INTEGER NOT NULL DEFAULT 18,
       theme TEXT NOT NULL DEFAULT 'light',
       opencc_mode TEXT NOT NULL DEFAULT 'none',
-      tap_zone_layout TEXT NOT NULL DEFAULT 'default'
+      tap_zone_layout TEXT NOT NULL DEFAULT 'default',
+      gap REAL NOT NULL DEFAULT 0.06
     )
   `);
+
+  // Migration: add gap column if missing
+  try {
+    db.exec(`ALTER TABLE user_settings ADD COLUMN gap REAL NOT NULL DEFAULT 0.06`);
+  } catch {
+    // Column already exists
+  }
 
   // Indexes
   db.exec(`

@@ -9,6 +9,7 @@ interface SettingsState {
 const defaultSettings: ReaderSettings = {
   writingMode: 'vertical-rl',
   fontSize: 18,
+  gap: 0.06,
   theme: 'light',
   openccMode: 'none',
   tapZoneLayout: 'default',

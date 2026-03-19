@@ -30,6 +30,14 @@ async function removeUser(id: string): Promise<void> {
   return request<void>(`/users/${id}`, { method: 'DELETE' })
 }
 
+async function updateUser(id: string, name: string, avatarColor?: string): Promise<User> {
+  return request<User>(`/users/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, avatarColor }),
+  })
+}
+
 // Normalize backend book response: backend returns coverPath (absolute path),
 // frontend expects coverUrl (/api/books/:id/cover)
 function normalizeBook(raw: any): Book {
@@ -79,15 +87,21 @@ async function updateProgress(userId: string, bookId: string, progress: string, 
   const parts = progress.split('@@').filter(Boolean)
   let percentage = 0
   if (parts.length >= 2) {
-    const first = parseFloat(parts[0])
-    const second = parseFloat(parts[1])
-    const third = parts.length >= 3 ? parseFloat(parts[2]) : 0
-    if (format === 'pdf' && second > 0) {
-      percentage = Math.round((first / second) * 100)
-    } else if (format !== 'pdf' && third > 0) {
-      percentage = Math.round(((first + second) / third) * 100)
+    const fourth = parts.length >= 4 ? parseFloat(parts[3]) : NaN
+    if (!isNaN(fourth)) {
+      // EPUB: use weighted fraction from SectionProgress
+      percentage = Math.round(fourth * 100)
     } else {
-      percentage = Math.round(second * 100)
+      const first = parseFloat(parts[0])
+      const second = parseFloat(parts[1])
+      const third = parts.length >= 3 ? parseFloat(parts[2]) : 0
+      if (format === 'pdf' && second > 0) {
+        percentage = Math.round((first / second) * 100)
+      } else if (format !== 'pdf' && third > 0) {
+        percentage = Math.round(((first + second) / third) * 100)
+      } else {
+        percentage = Math.round(second * 100)
+      }
     }
     percentage = Math.min(100, Math.max(0, percentage))
   }
@@ -135,6 +149,7 @@ export const api = {
     list: listUsers,
     create: createUser,
     remove: removeUser,
+    update: updateUser,
   },
   books: {
     list: listBooks,

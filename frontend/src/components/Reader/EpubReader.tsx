@@ -7,6 +7,8 @@ import {
 
 import './EpubReader.css'
 import { convertDoc } from '../../utils/opencc'
+// @ts-ignore
+import { SectionProgress } from '../../lib/foliate-js/progress.js'
 
 // Register the foliate-paginator custom element
 // @ts-ignore
@@ -32,6 +34,7 @@ interface EpubReaderProps {
   initialProgress?: string
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number
+  gap?: number
   theme?: 'light' | 'sepia' | 'dark'
   tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
   openccMode?: 'none' | 'tw2s' | 's2tw'
@@ -43,6 +46,12 @@ const THEME_CSS: Record<string, string> = {
   light: 'background-color: #ffffff !important; color: #000000 !important;',
   sepia: 'background-color: #f5ecd7 !important; color: #3d2b1f !important;',
   dark: 'background-color: #1a1a1a !important; color: #e0e0e0 !important;',
+}
+
+const THEME_BG: Record<string, string> = {
+  light: '#ffffff',
+  sepia: '#f5ecd7',
+  dark: '#1a1a1a',
 }
 
 function injectStyles(doc: Document, writingMode: string, fontSize: number, theme: string) {
@@ -65,25 +74,35 @@ function parseProgress(progress?: string): { chapterIndex: number; scrollFractio
 }
 
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, theme = 'light', tapZoneLayout = 'default', openccMode = 'none', onProgressChange, onTocLoad }, ref) => {
+  ({ bookId, initialProgress, writingMode, fontSize, gap = 0.06, theme = 'light', tapZoneLayout = 'default', openccMode = 'none', onProgressChange, onTocLoad }, ref) => {
     const paginatorRef = useRef<HTMLElement>(null)
     const bookRef = useRef<any>(null)
     const currentProgressRef = useRef<{ index: number; anchor: number } | null>(null)
     const currentAnchorTextRef = useRef<string>('')  // layout-independent text marker for mode switch
     const totalSectionsRef = useRef(0)
+    const sectionProgressRef = useRef<any>(null)
     const modeSwitchingRef = useRef(false)
     // Keep latest values accessible in event listeners without re-running effect
     const writingModeRef = useRef(writingMode)
     const fontSizeRef = useRef(fontSize)
+    const gapRef = useRef(gap)
     const themeRef = useRef(theme)
     const openccModeRef = useRef(openccMode)
     const onProgressChangeRef = useRef(onProgressChange)
 
     useEffect(() => { writingModeRef.current = writingMode }, [writingMode])
     useEffect(() => { fontSizeRef.current = fontSize }, [fontSize])
+    useEffect(() => { gapRef.current = gap }, [gap])
     useEffect(() => { themeRef.current = theme }, [theme])
     useEffect(() => { openccModeRef.current = openccMode }, [openccMode])
     useEffect(() => { onProgressChangeRef.current = onProgressChange }, [onProgressChange])
+
+    // Update gap when it changes
+    useEffect(() => {
+      const paginator = paginatorRef.current as any
+      if (!paginator) return
+      paginator.setAttribute('gap', `${Math.round(gap * 100)}%`)
+    }, [gap])
 
     // Re-inject CSS when fontSize/theme/openccMode changes (no position reset needed)
     useEffect(() => {
@@ -94,6 +113,9 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         for (const { doc } of contents) {
           if (doc) injectStyles(doc, writingModeRef.current, fontSize, theme)
         }
+        // Update paginator shadow DOM #background to match theme
+        const bg = paginator.shadowRoot?.getElementById('background')
+        if (bg) bg.style.background = THEME_BG[theme] ?? THEME_BG.light
       } catch { /* paginator may not be initialized yet */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fontSize, theme, openccMode])
@@ -198,6 +220,9 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
 
           bookRef.current = book
           totalSectionsRef.current = book.sections?.length ?? 0
+          try {
+            sectionProgressRef.current = new SectionProgress(book.sections, 1500, 1600)
+          } catch { /* fallback: no weighted progress */ }
           onTocLoad?.(book.toc ?? [])
 
           function handleLoad(e: CustomEvent) {
@@ -207,6 +232,9 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
               if (openccModeRef.current !== 'none') {
                 convertDoc(doc, openccModeRef.current)
               }
+              // Sync paginator shadow DOM #background with current theme
+              const bg = paginator.shadowRoot?.getElementById('background')
+              if (bg) bg.style.background = THEME_BG[themeRef.current] ?? THEME_BG.light
             }
           }
 
@@ -234,7 +262,13 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
               currentProgressRef.current = { index, anchor: fraction }
               // Suppress progress saves during mode switching to avoid overwriting with reset position
               if (!modeSwitchingRef.current) {
-                onProgressChangeRef.current(`@@${index}@@${fraction}@@${totalSectionsRef.current}`)
+                // Use SectionProgress for weighted book-wide fraction
+                const sp = sectionProgressRef.current
+                const size = e.detail?.size ?? 0
+                const weightedFraction = sp
+                  ? sp.getProgress(index, fraction, size).fraction
+                  : (index + fraction) / (totalSectionsRef.current || 1)
+                onProgressChangeRef.current(`@@${index}@@${fraction}@@${totalSectionsRef.current}@@${weightedFraction}`)
               }
             }
           }
@@ -243,7 +277,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           paginator.addEventListener('relocate', handleRelocate)
 
           paginator.setAttribute('flow', 'paginated')
-          paginator.setAttribute('gap', '0.06')
+          paginator.setAttribute('gap', `${Math.round(gapRef.current * 100)}%`)
           paginator.setAttribute('max-column-count', '1')
 
           paginator.open(book)
