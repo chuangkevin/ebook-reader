@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, Page } from '@playwright/test'
 import { createUser, deleteUser, uploadBook, deleteBook } from '../helpers/testDb'
 import { fileURLToPath } from 'url'
 import path from 'path'
@@ -22,7 +22,7 @@ test.afterEach(async () => {
   if (testUser) await deleteUser(testUser.id).catch(() => {})
 })
 
-async function openReader(page: any) {
+async function openReader(page: Page) {
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   await page.getByText(testUser.name).click()
@@ -31,22 +31,43 @@ async function openReader(page: any) {
   await page.waitForURL(`/reader/${testBook.id}`)
   await page.waitForSelector('foliate-paginator', { timeout: 10000 })
   await page.waitForTimeout(2500)
+  // Install a relocate listener to capture visible text from the range
+  await page.evaluate(() => {
+    const paginator = document.querySelector('foliate-paginator') as any
+    if (paginator) {
+      paginator.addEventListener('relocate', (e: any) => {
+        const range = e.detail?.range
+        if (range?.toString) {
+          (window as any).__lastVisibleText = range.toString().trim()
+        }
+      })
+    }
+  })
 }
 
-async function pressKey(page: any, key: string) {
+async function pressKey(page: Page, key: string) {
   await page.evaluate((k: string) => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
   }, key)
   await page.waitForTimeout(400)
 }
 
-async function getProgressPercent(page: any): Promise<number> {
+async function getProgressPercent(page: Page): Promise<number> {
   try {
     const text = await page.locator('text=/\\d+%/').textContent({ timeout: 3000 })
     return parseInt(text!.replace('%', ''))
   } catch {
     return 0
   }
+}
+
+/** Get the visible text captured by the relocate event (only current page, not whole section) */
+async function getVisibleText(page: Page): Promise<string> {
+  return page.evaluate(() => (window as any).__lastVisibleText ?? '')
+}
+
+function extractSnippet(text: string, length = 30): string {
+  return text.replace(/[\s\r\n]+/g, '').slice(0, length)
 }
 
 async function getBackendCfi(userId: string, bookId: string): Promise<{ index: number; anchor: number } | null> {
@@ -58,165 +79,191 @@ async function getBackendCfi(userId: string, bookId: string): Promise<{ index: n
   return { index: parseInt(parts[0]), anchor: parseFloat(parts[1]) }
 }
 
-async function openSettings(page: any) {
+async function openSettings(page: Page) {
   const settingsBtn = page.locator('svg[data-testid="SettingsIcon"]').locator('..')
   await settingsBtn.click()
   await page.waitForTimeout(400)
 }
 
-async function clickModeButton(page: any, mode: '直排' | '橫排') {
+async function clickModeButton(page: Page, mode: '直排' | '橫排') {
   await page.getByRole('button', { name: mode }).click()
-  // Wait for mode switch to complete (relocate event + goTo)
-  await page.waitForTimeout(3000)
+  // Wait for mode switch to complete (goTo + relocate)
+  await page.waitForTimeout(4000)
   await page.keyboard.press('Escape')
   await page.waitForTimeout(500)
 }
 
-test.describe('直橫排切換 - 位置保留', () => {
+test.describe('直橫排切換 — 位置保留（文字驗證）', () => {
   test.setTimeout(120_000)
 
-  test('切換橫排後 paginator 仍然可以翻頁', async ({ page }) => {
+  test('直排→橫排：切換後看到的文字包含切換前的文字片段', async ({ page }) => {
     await openReader(page)
 
-    // 翻 5 頁確認初始狀態正常
-    for (let i = 0; i < 5; i++) await pressKey(page, 'ArrowRight')
-    const beforeSwitch = await getProgressPercent(page)
-    console.log(`切換前進度: ${beforeSwitch}%`)
-    expect(beforeSwitch).toBeGreaterThan(0)
+    // 翻 20 頁，確保在章節中間而非開頭
+    for (let i = 0; i < 20; i++) await pressKey(page, 'ArrowRight')
+    await page.waitForTimeout(500)
 
-    await page.screenshot({ path: 'test-results/06-before-switch.png' })
+    const textBefore = await getVisibleText(page)
+    const snippetBefore = extractSnippet(textBefore)
+    const pctBefore = await getProgressPercent(page)
+    console.log(`[直排→橫排] 切換前: ${pctBefore}%, visible: "${snippetBefore}"`)
+    expect(snippetBefore.length).toBeGreaterThan(5)
 
-    // 切換橫排
-    await openSettings(page)
-    await clickModeButton(page, '橫排')
-
-    await page.screenshot({ path: 'test-results/06-after-switch-horiz.png' })
-
-    // 切換後 paginator 應還在 DOM 中
-    await expect(page.locator('foliate-paginator')).toBeAttached()
-
-    // 切換後應該可以繼續翻頁（不卡住）
-    const beforeNextPage = await getProgressPercent(page)
-    await pressKey(page, 'ArrowRight')
-    const afterNextPage = await getProgressPercent(page)
-    console.log(`橫排翻頁前: ${beforeNextPage}% → 後: ${afterNextPage}%`)
-
-    await page.screenshot({ path: 'test-results/06-horiz-next-page.png' })
-  })
-
-  test('切換橫排後進度不重置為 0%', async ({ page }) => {
-    await openReader(page)
-
-    // 翻 10 頁建立明顯的進度
-    for (let i = 0; i < 10; i++) await pressKey(page, 'ArrowRight')
-    const beforeSwitch = await getProgressPercent(page)
-    console.log(`切換前進度: ${beforeSwitch}%`)
-    expect(beforeSwitch).toBeGreaterThan(0)
-
-    // 切換橫排
-    await openSettings(page)
-    await clickModeButton(page, '橫排')
-
-    const afterSwitch = await getProgressPercent(page)
-    console.log(`橫排切換後進度: ${afterSwitch}%`)
-
-    await page.screenshot({ path: 'test-results/06-position-preserved.png' })
-
-    // 進度應大於 0（不應重置）
-    expect(afterSwitch).toBeGreaterThan(0)
-  })
-
-  test('直排→橫排→直排，進度始終大於 0', async ({ page }) => {
-    await openReader(page)
-
-    // 直排翻 8 頁
-    for (let i = 0; i < 8; i++) await pressKey(page, 'ArrowRight')
-    const vertPct = await getProgressPercent(page)
-    console.log(`直排 8 頁: ${vertPct}%`)
-    expect(vertPct).toBeGreaterThan(0)
+    await page.screenshot({ path: 'test-results/06-v2h-before.png' })
 
     // 切橫排
     await openSettings(page)
     await clickModeButton(page, '橫排')
-    const horizPct = await getProgressPercent(page)
-    console.log(`切橫排後: ${horizPct}%`)
-    expect(horizPct).toBeGreaterThan(0)
 
-    await page.screenshot({ path: 'test-results/06-horiz-pos.png' })
+    const textAfter = await getVisibleText(page)
+    const snippetAfter = extractSnippet(textAfter, 2000)
+    const pctAfter = await getProgressPercent(page)
+    console.log(`[直排→橫排] 切換後: ${pctAfter}%, visible(200): "${snippetAfter.slice(0, 60)}"`)
 
-    // 切回直排
-    await openSettings(page)
-    await clickModeButton(page, '直排')
-    const backVertPct = await getProgressPercent(page)
-    console.log(`切回直排: ${backVertPct}%`)
-    expect(backVertPct).toBeGreaterThan(0)
+    await page.screenshot({ path: 'test-results/06-v2h-after.png' })
 
-    await page.screenshot({ path: 'test-results/06-back-vert-pos.png' })
-
-    // 確認後端儲存了進度
-    await page.waitForTimeout(1500)
-    const res = await fetch(`${API_BASE}/users/${testUser.id}/books/${testBook.id}/progress`)
-    const saved = await res.json() as { cfi: string | null; percentage: number }
-    console.log('最終後端進度:', saved)
-    expect(saved.percentage).toBeGreaterThan(0)
-    expect(saved.cfi).toBeTruthy()
+    // 核心驗證：切換前可見文字的前 15 字應出現在切換後可見文字中
+    // 版面不同可能看到的範圍不同，但 anchor text 應該找得到
+    const searchKey = snippetBefore.slice(0, 15)
+    const found = snippetAfter.includes(searchKey)
+    console.log(`[直排→橫排] 搜尋 "${searchKey}" → ${found}`)
+    expect(found).toBeTruthy()
   })
 
-  test('切換模式後 chapter index 不變（不跳章）', async ({ page }) => {
+  test('橫排→直排：切換後看到的文字包含切換前的文字片段', async ({ page }) => {
     await openReader(page)
 
-    // 翻 15 頁讓 anchor 累積到非 0 的值
-    for (let i = 0; i < 15; i++) await pressKey(page, 'ArrowRight')
+    // 先切橫排
+    await openSettings(page)
+    await clickModeButton(page, '橫排')
+
+    // 翻 20 頁
+    for (let i = 0; i < 20; i++) await pressKey(page, 'ArrowRight')
+    await page.waitForTimeout(500)
+
+    const textBefore = await getVisibleText(page)
+    const snippetBefore = extractSnippet(textBefore)
+    const pctBefore = await getProgressPercent(page)
+    console.log(`[橫排→直排] 切換前: ${pctBefore}%, visible: "${snippetBefore}"`)
+    expect(snippetBefore.length).toBeGreaterThan(5)
+
+    await page.screenshot({ path: 'test-results/06-h2v-before.png' })
+
+    // 切直排
+    await openSettings(page)
+    await clickModeButton(page, '直排')
+
+    const textAfter = await getVisibleText(page)
+    const snippetAfter = extractSnippet(textAfter, 2000)
+    const pctAfter = await getProgressPercent(page)
+    console.log(`[橫排→直排] 切換後: ${pctAfter}%, visible(200): "${snippetAfter.slice(0, 60)}"`)
+
+    await page.screenshot({ path: 'test-results/06-h2v-after.png' })
+
+    const searchKey = snippetBefore.slice(0, 15)
+    const found = snippetAfter.includes(searchKey)
+    console.log(`[橫排→直排] 搜尋 "${searchKey}" → ${found}`)
+    expect(found).toBeTruthy()
+  })
+
+  test('直排→橫排→直排：來回切換，chapter index 不變且進度不歸零', async ({ page }) => {
+    await openReader(page)
+
+    // 翻 25 頁到章節中間
+    for (let i = 0; i < 25; i++) await pressKey(page, 'ArrowRight')
+    await page.waitForTimeout(1000)
+
+    const pctOriginal = await getProgressPercent(page)
+    const cfiBefore = await getBackendCfi(testUser.id, testBook.id)
+    console.log(`[來回切換] 初始: ${pctOriginal}%, cfi:`, cfiBefore)
+    expect(pctOriginal).toBeGreaterThan(0)
+    expect(cfiBefore).not.toBeNull()
+
+    // 直排→橫排
+    await openSettings(page)
+    await clickModeButton(page, '橫排')
+    await page.waitForTimeout(1500)
+    const cfiHoriz = await getBackendCfi(testUser.id, testBook.id)
+    const pctHoriz = await getProgressPercent(page)
+    console.log(`[來回切換] 橫排: ${pctHoriz}%, cfi:`, cfiHoriz)
+    expect(pctHoriz).toBeGreaterThan(0)
+    if (cfiBefore && cfiHoriz) {
+      expect(Math.abs(cfiHoriz.index - cfiBefore.index)).toBeLessThanOrEqual(1)
+    }
+
+    await page.screenshot({ path: 'test-results/06-roundtrip-horiz.png' })
+
+    // 橫排→直排
+    await openSettings(page)
+    await clickModeButton(page, '直排')
+    await page.waitForTimeout(1500)
+    const cfiBack = await getBackendCfi(testUser.id, testBook.id)
+    const pctBack = await getProgressPercent(page)
+    console.log(`[來回切換] 回直排: ${pctBack}%, cfi:`, cfiBack)
+    expect(pctBack).toBeGreaterThan(0)
+    if (cfiBefore && cfiBack) {
+      expect(Math.abs(cfiBack.index - cfiBefore.index)).toBeLessThanOrEqual(1)
+    }
+
+    await page.screenshot({ path: 'test-results/06-roundtrip-back.png' })
+  })
+
+  test('切換後 chapter index 不跳章', async ({ page }) => {
+    await openReader(page)
+
+    // 翻 20 頁
+    for (let i = 0; i < 20; i++) await pressKey(page, 'ArrowRight')
     await page.waitForTimeout(1000)
 
     const before = await getBackendCfi(testUser.id, testBook.id)
-    console.log('切換前 CFI:', before)
+    console.log('[不跳章] 切換前 CFI:', before)
     expect(before).not.toBeNull()
 
-    // 切換橫排
+    // 直排→橫排
     await openSettings(page)
     await clickModeButton(page, '橫排')
     await page.waitForTimeout(1500)
 
     const afterHoriz = await getBackendCfi(testUser.id, testBook.id)
-    console.log('切換橫排後 CFI:', afterHoriz)
+    console.log('[不跳章] 橫排後 CFI:', afterHoriz)
 
-    // 切回直排
+    if (before && afterHoriz) {
+      expect(Math.abs(afterHoriz.index - before.index)).toBeLessThanOrEqual(1)
+    }
+
+    // 橫排→直排
     await openSettings(page)
     await clickModeButton(page, '直排')
     await page.waitForTimeout(1500)
 
     const afterVert = await getBackendCfi(testUser.id, testBook.id)
-    console.log('切回直排後 CFI:', afterVert)
+    console.log('[不跳章] 切回直排 CFI:', afterVert)
 
-    // chapter index 不應跳到下一章（±1 以內容許，但不應跳多個章節）
-    if (before && afterHoriz) {
-      const indexDiff = Math.abs(afterHoriz.index - before.index)
-      console.log(`橫排切換 index 差: ${indexDiff} (${before.index} → ${afterHoriz.index})`)
-      expect(indexDiff).toBeLessThanOrEqual(1)
+    if (before && afterVert) {
+      expect(Math.abs(afterVert.index - before.index)).toBeLessThanOrEqual(1)
     }
 
-    await page.screenshot({ path: 'test-results/06-chapter-preserved.png' })
+    await page.screenshot({ path: 'test-results/06-no-chapter-jump.png' })
   })
 
-  test('切換模式後翻頁方向正確（不卡不跳）', async ({ page }) => {
+  test('切換後可以繼續翻頁，進度遞增', async ({ page }) => {
     await openReader(page)
 
     // 切橫排
     await openSettings(page)
     await clickModeButton(page, '橫排')
 
-    // 翻 5 頁，進度應遞增
+    const pctStart = await getProgressPercent(page)
+
+    // 翻 5 頁
     const percents: number[] = []
     for (let i = 0; i < 5; i++) {
       await pressKey(page, 'ArrowRight')
       percents.push(await getProgressPercent(page))
     }
-    console.log('橫排翻頁進度序列:', percents)
+    console.log('[翻頁測試] 橫排翻頁進度:', percents)
 
-    // 最後一頁應大於第一頁（整體遞增趨勢）
-    expect(percents[percents.length - 1]).toBeGreaterThanOrEqual(percents[0])
-
-    await page.screenshot({ path: 'test-results/06-horiz-sequential.png' })
+    expect(percents[percents.length - 1]).toBeGreaterThanOrEqual(pctStart)
+    await page.screenshot({ path: 'test-results/06-paging-after-switch.png' })
   })
 })

@@ -129,19 +129,42 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           // Fallback to pos.anchor (stored fraction) if text is not found.
           const anchor = anchorText
             ? (doc: Document) => {
-                const search = anchorText.slice(0, 25)
+                // Build a map of text nodes with their offsets in the concatenated text
                 const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
-                let node: Node | null
-                while ((node = walker.nextNode())) {
-                  const idx = (node.textContent ?? '').indexOf(search)
-                  if (idx >= 0) {
+                const nodes: { node: Node; start: number; len: number }[] = []
+                let fullText = ''
+                let nd: Node | null
+                while ((nd = walker.nextNode())) {
+                  const t = nd.textContent ?? ''
+                  nodes.push({ node: nd, start: fullText.length, len: t.length })
+                  fullText += t
+                }
+                // Strip whitespace from both for robust matching
+                const strip = (s: string) => s.replace(/[\s\r\n]+/g, '')
+                const cleanFull = strip(fullText)
+                const cleanSearch = strip(anchorText).slice(0, 20)
+                const matchIdx = cleanFull.indexOf(cleanSearch)
+                if (matchIdx < 0) return pos.anchor  // fallback
+                // Map clean index back to original fullText index
+                let cleanCount = 0
+                let origIdx = 0
+                for (let i = 0; i < fullText.length; i++) {
+                  if (!/[\s\r\n]/.test(fullText[i])) {
+                    if (cleanCount === matchIdx) { origIdx = i; break }
+                    cleanCount++
+                  }
+                }
+                // Find which node contains origIdx and create a Range
+                for (const n of nodes) {
+                  if (origIdx >= n.start && origIdx < n.start + n.len) {
+                    const offset = origIdx - n.start
                     const range = doc.createRange()
-                    range.setStart(node, idx)
-                    range.setEnd(node, idx + search.length)
+                    range.setStart(n.node, Math.min(offset, n.len))
+                    range.setEnd(n.node, Math.min(offset + 1, n.len))
                     return range
                   }
                 }
-                return pos.anchor  // fallback: use stored fraction
+                return pos.anchor  // fallback
               }
             : pos.anchor
           await paginator.goTo({ index: pos.index, anchor })
