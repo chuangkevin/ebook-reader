@@ -88,7 +88,7 @@ test.describe('EPUB 閱讀器', () => {
       await page.waitForTimeout(600)
     }
     // 確認進度 % 出現在工具列
-    const progressText = page.locator('text=/\\d+%/')
+    const progressText = page.locator('text=/\\d+%/').first()
     await expect(progressText).toBeVisible({ timeout: 5000 })
     await page.screenshot({ path: 'test-results/04-progress.png' })
   })

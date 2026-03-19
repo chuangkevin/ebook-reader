@@ -13,6 +13,7 @@ export interface PdfReaderHandle {
   next: () => Promise<void>
   prev: () => Promise<void>
   goTo: (href: string) => Promise<void>
+  goToFraction: (fraction: number) => Promise<void>
 }
 
 interface PdfReaderProps {
@@ -89,6 +90,9 @@ const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
       goTo: async (href: string) => {
         const page = parseInt(href, 10)
         if (!isNaN(page)) goToPage(page)
+      },
+      goToFraction: async (fraction: number) => {
+        if (numPages > 0) goToPage(Math.max(1, Math.round(fraction * numPages)))
       },
     }))
 

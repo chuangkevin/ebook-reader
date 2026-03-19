@@ -26,6 +26,7 @@ export interface EpubReaderHandle {
   next: () => Promise<void>
   prev: () => Promise<void>
   goTo: (href: string) => Promise<void>
+  goToFraction: (fraction: number) => Promise<void>
 }
 
 interface EpubReaderProps {
@@ -328,6 +329,15 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           } else {
             await paginator.goTo(href)
           }
+        } catch { /* ignore */ }
+      },
+      goToFraction: async (fraction: number) => {
+        try {
+          const paginator = paginatorRef.current as any
+          const sp = sectionProgressRef.current
+          if (!paginator || !sp) return
+          const [index, anchor] = sp.getSection(fraction)
+          await paginator.goTo({ index, anchor })
         } catch { /* ignore */ }
       },
     }))

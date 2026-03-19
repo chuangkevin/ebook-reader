@@ -12,6 +12,7 @@ export interface TxtReaderHandle {
   next: () => Promise<void>
   prev: () => Promise<void>
   goTo: (href: string) => Promise<void>
+  goToFraction: (fraction: number) => Promise<void>
 }
 
 interface TxtReaderProps {
@@ -147,6 +148,10 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
       prev: async () => scrollBackward(),
       goTo: async () => {
         // TXT has no chapter navigation
+      },
+      goToFraction: async (fraction: number) => {
+        const el = containerRef.current
+        if (el) el.scrollTop = fraction * (el.scrollHeight - el.clientHeight)
       },
     }))
 

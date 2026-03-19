@@ -59,7 +59,7 @@ test.describe('閱讀器工具列', () => {
 
   test('進度百分比顯示在工具列', async ({ page }) => {
     await openReader(page)
-    await expect(page.locator('text=/\\d+%/')).toBeVisible()
+    await expect(page.locator('text=/\\d+%/').first()).toBeVisible()
   })
 })
 

@@ -59,7 +59,7 @@ async function getBackendProgress(userId: string, bookId: string) {
 
 async function getProgressPercent(page: Page): Promise<number> {
   try {
-    const text = await page.locator('text=/\\d+%/').textContent({ timeout: 3000 })
+    const text = await page.locator('text=/\\d+%/').first().textContent({ timeout: 3000 })
     return parseInt(text!.replace('%', ''))
   } catch {
     return 0

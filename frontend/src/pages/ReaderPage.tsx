@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from '@mui/material'
+import { AppBar, Box, CircularProgress, IconButton, Slider, Toolbar, Typography } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
@@ -256,6 +256,49 @@ export default function ReaderPage() {
             onProgressChange={handleProgressChange}
           />
         )}
+      </Box>
+
+      {/* Page slider */}
+      <Box
+        sx={{
+          px: 2,
+          py: 0.5,
+          bgcolor: settings.theme === 'dark' ? '#111' : settings.theme === 'sepia' ? '#e8dcc8' : '#f5f5f5',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
+        <Slider
+          value={progressPercent}
+          min={0}
+          max={100}
+          onChange={(_: Event, value: number | number[]) => {
+            const pct = value as number
+            setProgressPercent(pct)
+          }}
+          onChangeCommitted={(_: React.SyntheticEvent | Event, value: number | number[]) => {
+            const fraction = (value as number) / 100
+            readerRef.current?.goToFraction(fraction)
+          }}
+          size="small"
+          sx={{
+            color: settings.theme === 'dark' ? '#888' : '#666',
+            '& .MuiSlider-thumb': { width: 14, height: 14 },
+            '& .MuiSlider-track': { height: 3 },
+            '& .MuiSlider-rail': { height: 3 },
+          }}
+        />
+        <Typography
+          variant="caption"
+          sx={{
+            minWidth: 32,
+            textAlign: 'right',
+            color: settings.theme === 'dark' ? '#aaa' : '#666',
+          }}
+        >
+          {progressPercent}%
+        </Typography>
       </Box>
 
       <ReaderSettings
