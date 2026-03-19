@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo "Running TypeScript type check (frontend)..."
-cd frontend && npx tsc --noEmit
+cd frontend && npx tsc -b --noEmit
 if [ $? -ne 0 ]; then
   echo "Frontend TypeScript check failed. Fix errors before committing."
   exit 1
