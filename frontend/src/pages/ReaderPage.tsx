@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AppBar, Box, CircularProgress, IconButton, Slider, Toolbar, Typography } from '@mui/material'
+import { AppBar, Box, CircularProgress, Drawer, IconButton, List, ListItem, ListItemButton, ListItemText, Slider, Toolbar, Typography } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'
+import BookmarkIcon from '@mui/icons-material/Bookmark'
+import DeleteIcon from '@mui/icons-material/Delete'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useBookStore } from '../stores/bookStore'
 import { useUserStore } from '../stores/userStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { api } from '../services/api.service'
+import { api, type PageBookmark } from '../services/api.service'
 import EpubReader, { type EpubReaderHandle } from '../components/Reader/EpubReader'
 import PdfReader, { type PdfReaderHandle } from '../components/Reader/PdfReader'
 import TxtReader, { type TxtReaderHandle } from '../components/Reader/TxtReader'
@@ -35,6 +38,9 @@ export default function ReaderPage() {
   const [tocOpen, setTocOpen] = useState(false)
   const [toc, setToc] = useState<TocItem[]>([])
   const [bookLoading, setBookLoading] = useState(false)
+  const [bookmarksOpen, setBookmarksOpen] = useState(false)
+  const [pageBookmarks, setPageBookmarks] = useState<PageBookmark[]>([])
+  const currentProgressStringRef = useRef('')
 
   useSwipeNavigation(
     readerAreaRef,
@@ -68,6 +74,52 @@ export default function ReaderPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id])
 
+  // Load page bookmarks
+  useEffect(() => {
+    if (!currentUser || !bookId) return
+    api.pageBookmarks.list(currentUser.id, bookId).then(setPageBookmarks).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, bookId])
+
+  async function addBookmark() {
+    if (!currentUser || !bookId || !currentProgressStringRef.current) return
+    try {
+      const bm = await api.pageBookmarks.add(currentUser.id, bookId, currentProgressStringRef.current, `${progressPercent}%`)
+      setPageBookmarks(prev => [bm, ...prev])
+    } catch { /* ignore */ }
+  }
+
+  async function removeBookmark(id: string) {
+    try {
+      await api.pageBookmarks.remove(id)
+      setPageBookmarks(prev => prev.filter(b => b.id !== id))
+    } catch { /* ignore */ }
+  }
+
+  function goToBookmark(position: string) {
+    // Parse position: @@index@@fraction@@...
+    const parts = position.split('@@').filter(Boolean)
+    if (parts.length >= 2) {
+      const index = parseInt(parts[0])
+      const fraction = parseFloat(parts[1])
+      const paginator = (readerRef.current as any)
+      // Use paginator directly for EPUB
+      if (paginator?.goTo) {
+        // This is EpubReaderHandle - no direct goTo with index/fraction
+        // Use goToFraction with weighted fraction if available (4th part)
+        const weighted = parts.length >= 4 ? parseFloat(parts[3]) : NaN
+        if (!isNaN(weighted)) {
+          readerRef.current?.goToFraction(weighted)
+        } else {
+          // Fallback: approximate fraction
+          const total = parts.length >= 3 ? parseFloat(parts[2]) : 1
+          readerRef.current?.goToFraction((index + fraction) / (total || 1))
+        }
+      }
+    }
+    setBookmarksOpen(false)
+  }
+
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -94,6 +146,7 @@ export default function ReaderPage() {
   const handleProgressChange = useCallback(
     (progress: string) => {
       if (!currentUser || !currentBook) return
+      currentProgressStringRef.current = progress
 
       // Parse fraction for display
       // PDF:  @@pageNum@@totalPages
@@ -196,8 +249,24 @@ export default function ReaderPage() {
           <IconButton
             color="inherit"
             size="small"
+            onClick={addBookmark}
+            title="加書籤"
+          >
+            <BookmarkAddIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            color="inherit"
+            size="small"
+            onClick={() => setBookmarksOpen(true)}
+            title="書籤列表"
+          >
+            <BookmarkIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            color="inherit"
+            size="small"
             onClick={() => setSettingsOpen(true)}
-            sx={{ ml: 1 }}
+            sx={{ ml: 0.5 }}
           >
             <SettingsIcon fontSize="small" />
           </IconButton>
@@ -315,6 +384,46 @@ export default function ReaderPage() {
           readerRef.current?.goTo(href)
         }}
       />
+
+      {/* 書籤列表 Drawer */}
+      <Drawer
+        anchor="right"
+        open={bookmarksOpen}
+        onClose={() => setBookmarksOpen(false)}
+        PaperProps={{ sx: { width: 280, bgcolor: '#222', color: '#fff' } }}
+      >
+        <Typography variant="h6" sx={{ p: 2, fontWeight: 600 }}>
+          書籤 ({pageBookmarks.length})
+        </Typography>
+        {pageBookmarks.length === 0 ? (
+          <Typography variant="body2" sx={{ px: 2, color: 'grey.500' }}>
+            尚無書籤。點擊工具列的 + 書籤按鈕加入。
+          </Typography>
+        ) : (
+          <List dense>
+            {pageBookmarks.map((bm) => (
+              <ListItem
+                key={bm.id}
+                secondaryAction={
+                  <IconButton edge="end" size="small" onClick={() => removeBookmark(bm.id)} sx={{ color: 'grey.500' }}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                }
+                disablePadding
+              >
+                <ListItemButton onClick={() => goToBookmark(bm.position)}>
+                  <ListItemText
+                    primary={bm.label || '書籤'}
+                    secondary={new Date(bm.createdAt).toLocaleString('zh-TW')}
+                    primaryTypographyProps={{ sx: { color: '#fff' } }}
+                    secondaryTypographyProps={{ sx: { color: 'grey.500', fontSize: 11 } }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Drawer>
     </Box>
   )
 }

@@ -117,6 +117,20 @@ export function initDatabase(): void {
     )
   `);
 
+  // Page bookmarks (閱讀器內頁面書籤)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS page_bookmarks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      book_id TEXT NOT NULL,
+      position TEXT NOT NULL,
+      label TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+    )
+  `);
+
   // User settings table
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_settings (

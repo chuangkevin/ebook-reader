@@ -139,6 +139,32 @@ async function getUserProgress(userId: string): Promise<Array<{ bookId: string; 
   return request<Array<{ bookId: string; cfi: string; percentage: number; lastReadAt: number }>>(`/users/${userId}/progress`)
 }
 
+// Page bookmarks (閱讀器內頁面書籤)
+export interface PageBookmark {
+  id: string
+  userId: string
+  bookId: string
+  position: string
+  label: string | null
+  createdAt: number
+}
+
+async function listPageBookmarks(userId: string, bookId: string): Promise<PageBookmark[]> {
+  return request<PageBookmark[]>(`/users/${userId}/books/${bookId}/page-bookmarks`)
+}
+
+async function addPageBookmark(userId: string, bookId: string, position: string, label?: string): Promise<PageBookmark> {
+  return request<PageBookmark>(`/users/${userId}/books/${bookId}/page-bookmarks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ position, label }),
+  })
+}
+
+async function removePageBookmark(id: string): Promise<void> {
+  return request<void>(`/page-bookmarks/${id}`, { method: 'DELETE' })
+}
+
 // Clear reading progress for a book
 async function clearProgress(userId: string, bookId: string): Promise<void> {
   return request<void>(`/users/${userId}/books/${bookId}/progress`, { method: 'DELETE' })
@@ -163,6 +189,11 @@ export const api = {
   bookmarks: {
     list: getBookmarks,
     toggle: toggleBookmark,
+  },
+  pageBookmarks: {
+    list: listPageBookmarks,
+    add: addPageBookmark,
+    remove: removePageBookmark,
   },
   settings: {
     get: getSettings,

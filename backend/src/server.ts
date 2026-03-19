@@ -13,6 +13,7 @@ import userRoutes from './routes/user.routes';
 import bookRoutes from './routes/book.routes';
 import progressRoutes from './routes/progress.routes';
 import bookmarkRoutes from './routes/bookmark.routes';
+import pageBookmarkRoutes from './routes/pageBookmark.routes';
 import settingsRoutes from './routes/settings.routes';
 
 const ensureDirectories = () => {
@@ -67,6 +68,7 @@ app.use('/api', userRoutes);
 app.use('/api', bookRoutes);
 app.use('/api', progressRoutes);
 app.use('/api', bookmarkRoutes);
+app.use('/api', pageBookmarkRoutes);
 app.use('/api', settingsRoutes);
 
 // Error handlers
