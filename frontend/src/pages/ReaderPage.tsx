@@ -270,14 +270,6 @@ export default function ReaderPage() {
           <IconButton
             color="inherit"
             size="small"
-            onClick={() => setFullscreen(f => !f)}
-            title={fullscreen ? '退出全螢幕' : '全螢幕'}
-          >
-            {fullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
-          </IconButton>
-          <IconButton
-            color="inherit"
-            size="small"
             onClick={() => setSettingsOpen(true)}
           >
             <SettingsIcon fontSize="small" />
@@ -288,10 +280,6 @@ export default function ReaderPage() {
       {/* Reader area */}
       <Box
         ref={readerAreaRef}
-        onClick={(e) => {
-          // Only toggle fullscreen if clicking directly on the reader area background (not children)
-          if (fullscreen && e.target === e.currentTarget) setFullscreen(false)
-        }}
         sx={{
           flexGrow: 1,
           overflow: 'hidden',
@@ -299,6 +287,22 @@ export default function ReaderPage() {
           bgcolor: settings.theme === 'dark' ? '#1a1a1a' : settings.theme === 'sepia' ? '#f5ecd7' : '#ffffff',
         }}
       >
+        {/* Floating fullscreen toggle button */}
+        <IconButton
+          onClick={() => setFullscreen(f => !f)}
+          size="small"
+          sx={{
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            zIndex: 20,
+            color: settings.theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.3)',
+            '&:hover': { color: settings.theme === 'dark' ? '#fff' : '#000' },
+          }}
+        >
+          {fullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+        </IconButton>
+
         {format === 'epub' && (
           <EpubReader
             ref={readerRef as React.Ref<EpubReaderHandle>}
