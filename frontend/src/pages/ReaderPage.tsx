@@ -209,9 +209,9 @@ export default function ReaderPage() {
         position="static"
         sx={{
           height: fullscreen ? 0 : TOOLBAR_HEIGHT,
+          minHeight: fullscreen ? 0 : TOOLBAR_HEIGHT,
           overflow: 'hidden',
-          transition: 'height 0.2s ease',
-          minHeight: TOOLBAR_HEIGHT,
+          transition: 'height 0.15s ease, min-height 0.15s ease',
           bgcolor: '#111',
           boxShadow: 'none',
         }}
@@ -315,7 +315,7 @@ export default function ReaderPage() {
             theme={settings.theme}
             tapZoneLayout={settings.tapZoneLayout}
             openccMode={settings.openccMode}
-            onCenterTap={() => setFullscreen(f => !f)}
+            onCenterTap={() => { /* reserved */ }}
             onProgressChange={handleProgressChange}
             onTocLoad={setToc}
           />
@@ -330,7 +330,7 @@ export default function ReaderPage() {
             writingMode={settings.writingMode}
             fontSize={settings.fontSize}
             tapZoneLayout={settings.tapZoneLayout}
-            onCenterTap={() => setFullscreen(f => !f)}
+            onCenterTap={() => { /* reserved */ }}
             onProgressChange={handleProgressChange}
           />
         )}
@@ -344,20 +344,18 @@ export default function ReaderPage() {
             writingMode={settings.writingMode}
             fontSize={settings.fontSize}
             tapZoneLayout={settings.tapZoneLayout}
-            onCenterTap={() => setFullscreen(f => !f)}
+            onCenterTap={() => { /* reserved */ }}
             onProgressChange={handleProgressChange}
           />
         )}
       </Box>
 
       {/* Page slider */}
+      {!fullscreen && (
       <Box
         sx={{
           px: 2,
-          py: fullscreen ? 0 : 0.5,
-          height: fullscreen ? 0 : 'auto',
-          overflow: 'hidden',
-          transition: 'all 0.2s ease',
+          py: 0.5,
           bgcolor: settings.theme === 'dark' ? '#111' : settings.theme === 'sepia' ? '#e8dcc8' : '#f5f5f5',
           display: 'flex',
           alignItems: 'center',
@@ -395,6 +393,7 @@ export default function ReaderPage() {
           {progressPercent}%
         </Typography>
       </Box>
+      )}
 
       <ReaderSettings
         open={settingsOpen}
