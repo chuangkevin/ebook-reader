@@ -5,6 +5,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
 import DeleteIcon from '@mui/icons-material/Delete'
+import FullscreenIcon from '@mui/icons-material/Fullscreen'
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useBookStore } from '../stores/bookStore'
@@ -268,8 +270,15 @@ export default function ReaderPage() {
           <IconButton
             color="inherit"
             size="small"
+            onClick={() => setFullscreen(f => !f)}
+            title={fullscreen ? '退出全螢幕' : '全螢幕'}
+          >
+            {fullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+          </IconButton>
+          <IconButton
+            color="inherit"
+            size="small"
             onClick={() => setSettingsOpen(true)}
-            sx={{ ml: 0.5 }}
           >
             <SettingsIcon fontSize="small" />
           </IconButton>
@@ -279,6 +288,10 @@ export default function ReaderPage() {
       {/* Reader area */}
       <Box
         ref={readerAreaRef}
+        onClick={(e) => {
+          // Only toggle fullscreen if clicking directly on the reader area background (not children)
+          if (fullscreen && e.target === e.currentTarget) setFullscreen(false)
+        }}
         sx={{
           flexGrow: 1,
           overflow: 'hidden',
