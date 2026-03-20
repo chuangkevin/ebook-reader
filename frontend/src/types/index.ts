@@ -2,6 +2,7 @@ export interface User {
   id: string
   name: string
   avatar?: string
+  avatarColor?: string
 }
 
 export interface Book {

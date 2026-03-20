@@ -22,6 +22,7 @@ interface TxtReaderProps {
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number
   tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
+  onCenterTap?: () => void
   onProgressChange: (progress: string) => void
 }
 
@@ -34,7 +35,7 @@ function parseScrollFraction(progress?: string): number {
 }
 
 const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onProgressChange }, ref) => {
+  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const [text, setText] = useState<string>('')
     const [loading, setLoading] = useState(true)
@@ -166,6 +167,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
         {tapZoneLayout === 'default' ? (
           <>
             <div className="epub-tap-zone epub-tap-left" onClick={onPrev} />
+            <div className="epub-tap-zone epub-tap-center" onClick={onCenterTap} />
             <div className="epub-tap-zone epub-tap-right" onClick={onNext} />
           </>
         ) : (
@@ -174,6 +176,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
               className="epub-tap-zone epub-tap-top"
               onClick={tapZoneLayout === 'bottom-next' ? onPrev : onNext}
             />
+            <div className="epub-tap-zone epub-tap-center-h" onClick={onCenterTap} />
             <div
               className="epub-tap-zone epub-tap-bottom"
               onClick={tapZoneLayout === 'bottom-next' ? onNext : onPrev}

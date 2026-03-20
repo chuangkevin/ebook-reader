@@ -136,7 +136,7 @@ export default function UserSelectionScreen() {
                   >
                     <Avatar
                       src={user.avatar}
-                      sx={{ width: 64, height: 64, bgcolor: '#5c6bc0', fontSize: 28 }}
+                      sx={{ width: 64, height: 64, bgcolor: user.avatarColor ?? '#5c6bc0', fontSize: 28 }}
                     >
                       {!user.avatar && user.name.charAt(0).toUpperCase()}
                     </Avatar>

@@ -286,20 +286,6 @@ export default function ReaderPage() {
           bgcolor: settings.theme === 'dark' ? '#1a1a1a' : settings.theme === 'sepia' ? '#f5ecd7' : '#ffffff',
         }}
       >
-        {/* Center tap zone: toggle fullscreen */}
-        <Box
-          onClick={() => setFullscreen(f => !f)}
-          sx={{
-            position: 'absolute',
-            top: '30%',
-            left: '30%',
-            width: '40%',
-            height: '40%',
-            zIndex: 5,
-            cursor: 'pointer',
-          }}
-        />
-
         {format === 'epub' && (
           <EpubReader
             ref={readerRef as React.Ref<EpubReaderHandle>}
@@ -312,6 +298,7 @@ export default function ReaderPage() {
             theme={settings.theme}
             tapZoneLayout={settings.tapZoneLayout}
             openccMode={settings.openccMode}
+            onCenterTap={() => setFullscreen(f => !f)}
             onProgressChange={handleProgressChange}
             onTocLoad={setToc}
           />
@@ -326,6 +313,7 @@ export default function ReaderPage() {
             writingMode={settings.writingMode}
             fontSize={settings.fontSize}
             tapZoneLayout={settings.tapZoneLayout}
+            onCenterTap={() => setFullscreen(f => !f)}
             onProgressChange={handleProgressChange}
           />
         )}
@@ -339,6 +327,7 @@ export default function ReaderPage() {
             writingMode={settings.writingMode}
             fontSize={settings.fontSize}
             tapZoneLayout={settings.tapZoneLayout}
+            onCenterTap={() => setFullscreen(f => !f)}
             onProgressChange={handleProgressChange}
           />
         )}

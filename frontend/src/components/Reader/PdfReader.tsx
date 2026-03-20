@@ -23,6 +23,7 @@ interface PdfReaderProps {
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number
   tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
+  onCenterTap?: () => void
   onProgressChange: (progress: string) => void
 }
 
@@ -35,7 +36,7 @@ function parsePageFromProgress(progress?: string): number {
 }
 
 const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
-  ({ bookId, initialProgress, tapZoneLayout = 'default', onProgressChange }, ref) => {
+  ({ bookId, initialProgress, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const [numPages, setNumPages] = useState<number>(0)
     const [currentPage, setCurrentPage] = useState<number>(() => parsePageFromProgress(initialProgress))
@@ -117,6 +118,7 @@ const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
         {tapZoneLayout === 'default' ? (
           <>
             <div className="epub-tap-zone epub-tap-left" onClick={onPrev} />
+            <div className="epub-tap-zone epub-tap-center" onClick={onCenterTap} />
             <div className="epub-tap-zone epub-tap-right" onClick={onNext} />
           </>
         ) : (
@@ -125,6 +127,7 @@ const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
               className="epub-tap-zone epub-tap-top"
               onClick={tapZoneLayout === 'bottom-next' ? onPrev : onNext}
             />
+            <div className="epub-tap-zone epub-tap-center-h" onClick={onCenterTap} />
             <div
               className="epub-tap-zone epub-tap-bottom"
               onClick={tapZoneLayout === 'bottom-next' ? onNext : onPrev}

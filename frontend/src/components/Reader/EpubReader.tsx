@@ -38,6 +38,7 @@ interface EpubReaderProps {
   gap?: number
   theme?: 'light' | 'sepia' | 'dark'
   tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
+  onCenterTap?: () => void
   openccMode?: 'none' | 'tw2s' | 's2tw'
   onProgressChange: (progress: string) => void
   onTocLoad?: (toc: any[]) => void
@@ -73,7 +74,7 @@ function parseProgress(progress?: string): { chapterIndex: number; scrollFractio
 }
 
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, gap = 0.06, theme = 'light', tapZoneLayout = 'default', openccMode = 'none', onProgressChange, onTocLoad }, ref) => {
+  ({ bookId, initialProgress, writingMode, fontSize, gap = 0.06, theme = 'light', tapZoneLayout = 'default', openccMode = 'none', onCenterTap, onProgressChange, onTocLoad }, ref) => {
     const paginatorRef = useRef<HTMLElement>(null)
     const bookRef = useRef<any>(null)
     const currentProgressRef = useRef<{ index: number; anchor: number } | null>(null)
@@ -348,6 +349,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         {tapZoneLayout === 'default' ? (
           <>
             <div className="epub-tap-zone epub-tap-left" onClick={onPrev} />
+            <div className="epub-tap-zone epub-tap-center" onClick={onCenterTap} />
             <div className="epub-tap-zone epub-tap-right" onClick={onNext} />
           </>
         ) : (
@@ -356,6 +358,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
               className="epub-tap-zone epub-tap-top"
               onClick={tapZoneLayout === 'bottom-next' ? onPrev : onNext}
             />
+            <div className="epub-tap-zone epub-tap-center-h" onClick={onCenterTap} />
             <div
               className="epub-tap-zone epub-tap-bottom"
               onClick={tapZoneLayout === 'bottom-next' ? onNext : onPrev}

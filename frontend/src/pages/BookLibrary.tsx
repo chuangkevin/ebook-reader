@@ -342,7 +342,7 @@ export default function BookLibrary() {
   function openProfile() {
     if (!currentUser) return
     setProfileName(currentUser.name)
-    setProfileColor((currentUser as any).avatarColor ?? PROFILE_COLORS[0])
+    setProfileColor(currentUser.avatarColor ?? PROFILE_COLORS[0])
     setProfileOpen(true)
   }
 
@@ -351,7 +351,7 @@ export default function BookLibrary() {
     setProfileSaving(true)
     try {
       const updated = await api.users.update(currentUser.id, profileName.trim(), profileColor)
-      setCurrentUser({ ...currentUser, name: updated.name, avatar: profileColor })
+      setCurrentUser({ ...currentUser, name: updated.name, avatarColor: profileColor })
     } catch { /* ignore */ }
     setProfileSaving(false)
     setProfileOpen(false)

@@ -33,6 +33,22 @@
   height: 100%;
 }
 
+/* Default layout: center zone for fullscreen toggle */
+.epub-tap-center {
+  left: 30%;
+  top: 0;
+  width: 40%;
+  height: 100%;
+}
+
+/* One-hand layout: center zone for fullscreen toggle */
+.epub-tap-center-h {
+  left: 0;
+  top: 30%;
+  width: 100%;
+  height: 40%;
+}
+
 /* One-hand layout: top/bottom halves */
 .epub-tap-top {
   left: 0;
