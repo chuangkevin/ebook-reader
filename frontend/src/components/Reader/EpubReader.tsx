@@ -114,11 +114,18 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       try {
         const contents = paginator.getContents?.() ?? []
         for (const { doc } of contents) {
-          if (doc) injectStyles(doc, writingModeRef.current, fontSize, theme)
+          if (doc) {
+            injectStyles(doc, writingModeRef.current, fontSize, theme)
+            if (openccModeRef.current !== 'none') {
+              convertDoc(doc, openccModeRef.current)
+            }
+          }
         }
         // Update paginator shadow DOM #background to match theme
         const bg = paginator.shadowRoot?.getElementById('background')
         if (bg) bg.style.background = (THEME_COLORS[theme] ?? THEME_COLORS.light).bg
+        // Force paginator to re-layout after font size change
+        paginator.render?.()
       } catch { /* paginator may not be initialized yet */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fontSize, theme, openccMode])
