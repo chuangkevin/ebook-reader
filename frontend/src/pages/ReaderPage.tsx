@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AppBar, Box, CircularProgress, Drawer, IconButton, List, ListItem, ListItemButton, ListItemText, Slider, Toolbar, Typography } from '@mui/material'
+import { AppBar, Box, CircularProgress, Drawer, IconButton, List, ListItem, ListItemButton, ListItemText, Slider, Snackbar, Toolbar, Typography } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
@@ -42,6 +42,7 @@ export default function ReaderPage() {
   const [bookLoading, setBookLoading] = useState(false)
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
   const [pageBookmarks, setPageBookmarks] = useState<PageBookmark[]>([])
+  const [snackMsg, setSnackMsg] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
   const currentProgressStringRef = useRef('')
 
@@ -89,6 +90,7 @@ export default function ReaderPage() {
     try {
       const bm = await api.pageBookmarks.add(currentUser.id, bookId, currentProgressStringRef.current, `${progressPercent}%`)
       setPageBookmarks(prev => [bm, ...prev])
+      setSnackMsg(`已加入書籤 (${progressPercent}%)`)
     } catch { /* ignore */ }
   }
 
@@ -449,6 +451,14 @@ export default function ReaderPage() {
           </List>
         )}
       </Drawer>
+
+      <Snackbar
+        open={!!snackMsg}
+        autoHideDuration={1500}
+        onClose={() => setSnackMsg('')}
+        message={snackMsg}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   )
 }
