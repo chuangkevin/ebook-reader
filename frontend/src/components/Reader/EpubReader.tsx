@@ -60,10 +60,10 @@ function injectStyles(doc: Document, writingMode: string, fontSize: number, them
   }
   const { bg, fg } = THEME_COLORS[theme] ?? THEME_COLORS.light
   // Use * selector with !important to override inline styles and book CSS on all elements
-  const allElements = 'html, body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary'
-  const bodyElements = 'p, span, div, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary'
+  const allElements = 'html, body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary, article, section, pre, code, figure'
+  const bodyElements = 'p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary, article, section, pre, code, figure'
   style.textContent = `
-    html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; background-color: ${bg} !important; }
+    html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; background-color: ${bg} !important; -webkit-text-size-adjust: none !important; text-size-adjust: none !important; }
     ${bodyElements} { font-size: ${fontSize}px !important; }
     ${allElements} { color: ${fg} !important; }
   `
@@ -112,20 +112,29 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       const paginator = paginatorRef.current as any
       if (!paginator) return
       try {
+        const { bg, fg } = THEME_COLORS[theme] ?? THEME_COLORS.light
+        const wm = writingModeRef.current
+        const allElements = 'html, body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary, article, section, pre, code, figure'
+        const css = `
+          html, body { writing-mode: ${wm} !important; -webkit-writing-mode: ${wm} !important; font-size: ${fontSize}px !important; background-color: ${bg} !important; -webkit-text-size-adjust: none !important; text-size-adjust: none !important; }
+          ${allElements} { font-size: ${fontSize}px !important; color: ${fg} !important; }
+        `
+        // Use paginator.setStyles() which properly re-layouts via view.expand()
+        paginator.setStyles?.(css)
+
+        // Also inject via injectStyles for the handleLoad path
         const contents = paginator.getContents?.() ?? []
         for (const { doc } of contents) {
           if (doc) {
-            injectStyles(doc, writingModeRef.current, fontSize, theme)
+            injectStyles(doc, wm, fontSize, theme)
             if (openccModeRef.current !== 'none') {
               convertDoc(doc, openccModeRef.current)
             }
           }
         }
         // Update paginator shadow DOM #background to match theme
-        const bg = paginator.shadowRoot?.getElementById('background')
-        if (bg) bg.style.background = (THEME_COLORS[theme] ?? THEME_COLORS.light).bg
-        // Force paginator to re-layout after font size change
-        paginator.render?.()
+        const bgEl = paginator.shadowRoot?.getElementById('background')
+        if (bgEl) bgEl.style.background = bg
       } catch { /* paginator may not be initialized yet */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fontSize, theme, openccMode])
