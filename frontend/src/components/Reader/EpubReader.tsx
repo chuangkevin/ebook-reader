@@ -60,9 +60,12 @@ function injectStyles(doc: Document, writingMode: string, fontSize: number, them
   }
   const { bg, fg } = THEME_COLORS[theme] ?? THEME_COLORS.light
   // Use * selector with !important to override inline styles and book CSS on all elements
+  const allElements = 'html, body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary'
+  const bodyElements = 'p, span, div, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary'
   style.textContent = `
     html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; background-color: ${bg} !important; }
-    html, body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary { color: ${fg} !important; }
+    ${bodyElements} { font-size: ${fontSize}px !important; }
+    ${allElements} { color: ${fg} !important; }
   `
 }
 
