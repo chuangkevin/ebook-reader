@@ -43,16 +43,10 @@ interface EpubReaderProps {
   onTocLoad?: (toc: any[]) => void
 }
 
-const THEME_CSS: Record<string, string> = {
-  light: 'background-color: #ffffff !important; color: #000000 !important;',
-  sepia: 'background-color: #f5ecd7 !important; color: #3d2b1f !important;',
-  dark: 'background-color: #1a1a1a !important; color: #e0e0e0 !important;',
-}
-
-const THEME_BG: Record<string, string> = {
-  light: '#ffffff',
-  sepia: '#f5ecd7',
-  dark: '#1a1a1a',
+const THEME_COLORS: Record<string, { bg: string; fg: string }> = {
+  light: { bg: '#ffffff', fg: '#000000' },
+  sepia: { bg: '#f5ecd7', fg: '#3d2b1f' },
+  dark: { bg: '#1a1a1a', fg: '#e0e0e0' },
 }
 
 function injectStyles(doc: Document, writingMode: string, fontSize: number, theme: string) {
@@ -63,8 +57,12 @@ function injectStyles(doc: Document, writingMode: string, fontSize: number, them
     style.id = '__wm'
     doc.head.appendChild(style)
   }
-  const themeCss = THEME_CSS[theme] ?? THEME_CSS.light
-  style.textContent = `html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; ${themeCss} }`
+  const { bg, fg } = THEME_COLORS[theme] ?? THEME_COLORS.light
+  // Use * selector with !important to override inline styles and book CSS on all elements
+  style.textContent = `
+    html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; background-color: ${bg} !important; }
+    html, body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary { color: ${fg} !important; }
+  `
 }
 
 function parseProgress(progress?: string): { chapterIndex: number; scrollFraction: number } | null {
@@ -116,7 +114,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         }
         // Update paginator shadow DOM #background to match theme
         const bg = paginator.shadowRoot?.getElementById('background')
-        if (bg) bg.style.background = THEME_BG[theme] ?? THEME_BG.light
+        if (bg) bg.style.background = (THEME_COLORS[theme] ?? THEME_COLORS.light).bg
       } catch { /* paginator may not be initialized yet */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fontSize, theme, openccMode])
@@ -235,7 +233,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
               }
               // Sync paginator shadow DOM #background with current theme
               const bg = paginator.shadowRoot?.getElementById('background')
-              if (bg) bg.style.background = THEME_BG[themeRef.current] ?? THEME_BG.light
+              if (bg) bg.style.background = (THEME_COLORS[themeRef.current] ?? THEME_COLORS.light).bg
             }
           }
 

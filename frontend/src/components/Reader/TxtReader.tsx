@@ -93,6 +93,8 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
           c.scrollTop = fraction * maxScroll
         }
         progressRestoredRef.current = true
+        // Report initial progress so the book appears in "繼續閱讀"
+        onProgressChangeRef.current(`@@${fraction.toFixed(6)}@@1`)
         setTimeout(() => { scrollingProgrammaticallyRef.current = false }, 100)
       })
       return () => cancelAnimationFrame(raf)

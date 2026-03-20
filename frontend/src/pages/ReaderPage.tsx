@@ -40,6 +40,7 @@ export default function ReaderPage() {
   const [bookLoading, setBookLoading] = useState(false)
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
   const [pageBookmarks, setPageBookmarks] = useState<PageBookmark[]>([])
+  const [fullscreen, setFullscreen] = useState(false)
   const currentProgressStringRef = useRef('')
 
   useSwipeNavigation(
@@ -205,7 +206,9 @@ export default function ReaderPage() {
       <AppBar
         position="static"
         sx={{
-          height: TOOLBAR_HEIGHT,
+          height: fullscreen ? 0 : TOOLBAR_HEIGHT,
+          overflow: 'hidden',
+          transition: 'height 0.2s ease',
           minHeight: TOOLBAR_HEIGHT,
           bgcolor: '#111',
           boxShadow: 'none',
@@ -283,6 +286,20 @@ export default function ReaderPage() {
           bgcolor: settings.theme === 'dark' ? '#1a1a1a' : settings.theme === 'sepia' ? '#f5ecd7' : '#ffffff',
         }}
       >
+        {/* Center tap zone: toggle fullscreen */}
+        <Box
+          onClick={() => setFullscreen(f => !f)}
+          sx={{
+            position: 'absolute',
+            top: '30%',
+            left: '30%',
+            width: '40%',
+            height: '40%',
+            zIndex: 5,
+            cursor: 'pointer',
+          }}
+        />
+
         {format === 'epub' && (
           <EpubReader
             ref={readerRef as React.Ref<EpubReaderHandle>}
@@ -331,7 +348,10 @@ export default function ReaderPage() {
       <Box
         sx={{
           px: 2,
-          py: 0.5,
+          py: fullscreen ? 0 : 0.5,
+          height: fullscreen ? 0 : 'auto',
+          overflow: 'hidden',
+          transition: 'all 0.2s ease',
           bgcolor: settings.theme === 'dark' ? '#111' : settings.theme === 'sepia' ? '#e8dcc8' : '#f5f5f5',
           display: 'flex',
           alignItems: 'center',

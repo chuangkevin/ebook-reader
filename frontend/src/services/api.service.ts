@@ -104,6 +104,8 @@ async function updateProgress(userId: string, bookId: string, progress: string, 
       }
     }
     percentage = Math.min(100, Math.max(0, percentage))
+    // Ensure any reading activity records at least 1% so book appears in "繼續閱讀"
+    if (percentage === 0 && parts.length >= 2) percentage = 1
   }
   return request<void>(`/users/${userId}/books/${bookId}/progress`, {
     method: 'PUT',
