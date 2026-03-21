@@ -31,7 +31,7 @@ export default function UserSelectionScreen() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     api.users.list()
@@ -73,7 +73,7 @@ export default function UserSelectionScreen() {
     }
   }
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     setDeletingId(id)
     try {

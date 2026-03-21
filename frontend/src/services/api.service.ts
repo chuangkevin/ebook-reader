@@ -9,7 +9,6 @@ import {
   addToSyncQueue,
   getLocalBooks,
   getLocalUsers,
-  getAllLocalProgress,
 } from './offlineStorage'
 
 const BASE_URL = '/api'

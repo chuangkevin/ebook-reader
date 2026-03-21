@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — opencc-js has no type declarations
 import * as OpenCC from 'opencc-js'
 
 type ConverterFn = (text: string) => string
@@ -9,14 +11,14 @@ let s2twConverter: ConverterFn | null = null
 function getConverter(mode: 'tw2s' | 's2tw'): ConverterFn {
   if (mode === 'tw2s') {
     if (!tw2sConverter) {
-      tw2sConverter = OpenCC.Converter({ from: 'tw', to: 'cn' })
+      tw2sConverter = OpenCC.Converter({ from: 'tw', to: 'cn' }) as ConverterFn
     }
-    return tw2sConverter
+    return tw2sConverter!
   } else {
     if (!s2twConverter) {
-      s2twConverter = OpenCC.Converter({ from: 'cn', to: 'tw' })
+      s2twConverter = OpenCC.Converter({ from: 'cn', to: 'tw' }) as ConverterFn
     }
-    return s2twConverter
+    return s2twConverter!
   }
 }
 

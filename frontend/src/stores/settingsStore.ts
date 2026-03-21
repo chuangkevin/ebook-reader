@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { ReaderSettings } from '../types/index'
-import { getLocalSettings, saveLocalSettings } from '../services/offlineStorage'
+import { getLocalSettings } from '../services/offlineStorage'
 
 interface SettingsState {
   settings: ReaderSettings
@@ -16,7 +16,7 @@ const defaultSettings: ReaderSettings = {
   tapZoneLayout: 'default',
 }
 
-export const useSettingsStore = create<SettingsState>()((set, get) => ({
+export const useSettingsStore = create<SettingsState>()((set) => ({
   settings: defaultSettings,
   setSettings: (partial) => {
     set((state) => ({
