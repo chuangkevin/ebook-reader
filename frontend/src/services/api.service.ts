@@ -1,4 +1,16 @@
 import type { User, Book, ReaderSettings } from '../types/index'
+import {
+  saveLocalProgress,
+  getLocalProgress,
+  saveLocalSettings,
+  getLocalSettings,
+  saveLocalBooks,
+  saveLocalUsers,
+  addToSyncQueue,
+  getLocalBooks,
+  getLocalUsers,
+  getAllLocalProgress,
+} from './offlineStorage'
 
 const BASE_URL = '/api'
 
@@ -13,9 +25,28 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-// Users
+/**
+ * Try a network request; if offline, return null.
+ */
+async function tryRequest<T>(url: string, options?: RequestInit): Promise<T | null> {
+  try {
+    return await request<T>(url, options)
+  } catch {
+    return null
+  }
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
 async function listUsers(): Promise<User[]> {
-  return request<User[]>('/users')
+  const serverUsers = await tryRequest<User[]>('/users')
+  if (serverUsers) {
+    await saveLocalUsers(serverUsers)
+    return serverUsers
+  }
+  // Offline fallback
+  const local = await getLocalUsers()
+  return local as User[]
 }
 
 async function createUser(name: string): Promise<User> {
@@ -30,146 +61,269 @@ async function removeUser(id: string): Promise<void> {
   return request<void>(`/users/${id}`, { method: 'DELETE' })
 }
 
-async function updateUser(id: string, name: string, avatarColor?: string): Promise<User> {
-  return request<User>(`/users/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, avatarColor }),
-  })
-}
+// ─── Books ───────────────────────────────────────────────────────────────────
 
-// Normalize backend book response: backend returns coverPath (absolute path),
-// frontend expects coverUrl (/api/books/:id/cover)
-function normalizeBook(raw: any): Book {
-  return {
-    id: raw.id,
-    title: raw.title,
-    author: raw.author,
-    format: raw.format,
-    coverUrl: `/api/books/${raw.id}/cover`,
-    progress: raw.progress,
-    addedAt: raw.uploadedAt ? String(raw.uploadedAt) : '',
-    uploadedBy: raw.uploadedBy,
-  }
-}
-
-// Books
 async function listBooks(_userId: string): Promise<Book[]> {
-  const raw = await request<any[]>('/books')
-  return raw.map(normalizeBook)
-}
-
-async function getBook(bookId: string): Promise<Book> {
-  const raw = await request<any>(`/books/${bookId}`)
-  return normalizeBook(raw)
+  const serverBooks = await tryRequest<Book[]>('/books')
+  if (serverBooks) {
+    await saveLocalBooks(
+      serverBooks.map(b => ({
+        id: b.id,
+        title: b.title,
+        author: b.author,
+        format: b.format,
+        coverUrl: b.coverUrl ?? '',
+        cached: false, // will be updated by book cache logic
+      }))
+    )
+    return serverBooks
+  }
+  // Offline fallback
+  const local = await getLocalBooks()
+  return local.map(b => ({
+    id: b.id,
+    title: b.title,
+    author: b.author,
+    format: b.format as Book['format'],
+    coverUrl: b.coverUrl,
+    addedAt: '',
+  }))
 }
 
 async function uploadBook(file: File, userId: string): Promise<Book> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('uploadedBy', String(userId))
-  const raw = await request<any>('/books', {
+  return request<Book>('/books', {
     method: 'POST',
     body: formData,
   })
-  return normalizeBook(raw)
 }
 
-async function removeBook(bookId: string, userId: string): Promise<void> {
-  return request<void>(`/books/${bookId}?requestedBy=${encodeURIComponent(userId)}`, { method: 'DELETE' })
+async function removeBook(bookId: string): Promise<void> {
+  return request<void>(`/books/${bookId}`, { method: 'DELETE' })
 }
 
-async function updateProgress(userId: string, bookId: string, progress: string, format: string): Promise<void> {
-  // Parse progress string to cfi + percentage
-  // EPUB: @@chapterIndex@@sectionFraction@@totalSections -> (chapterIndex+sectionFraction)/totalSections * 100
-  // PDF:  @@page@@totalPages                            -> page/total * 100
-  // TXT:  @@scrollFraction@@1                           -> scrollFraction * 100
+// ─── Progress ────────────────────────────────────────────────────────────────
+
+interface ProgressResponse {
+  cfi: string | null
+  percentage: number
+  version: number
+  lastReadAt?: number
+  conflict?: boolean
+  serverData?: ProgressResponse
+  serverVersion?: number
+}
+
+async function updateProgress(
+  userId: string,
+  bookId: string,
+  progress: string,
+  format: string
+): Promise<ProgressResponse | null> {
+  // Parse progress string to percentage
   const parts = progress.split('@@').filter(Boolean)
   let percentage = 0
   if (parts.length >= 2) {
-    const fourth = parts.length >= 4 ? parseFloat(parts[3]) : NaN
-    if (!isNaN(fourth)) {
-      // EPUB: use weighted fraction from SectionProgress
-      percentage = Math.round(fourth * 100)
+    const first = parseFloat(parts[0])
+    const second = parseFloat(parts[1])
+    if (format === 'pdf' && second > 0) {
+      percentage = Math.round((first / second) * 100)
     } else {
-      const first = parseFloat(parts[0])
-      const second = parseFloat(parts[1])
-      const third = parts.length >= 3 ? parseFloat(parts[2]) : 0
-      if (format === 'pdf' && second > 0) {
-        percentage = Math.round((first / second) * 100)
-      } else if (format !== 'pdf' && third > 0) {
-        percentage = Math.round(((first + second) / third) * 100)
-      } else {
-        percentage = Math.round(second * 100)
-      }
+      percentage = Math.round(second * 100)
     }
-    percentage = Math.min(100, Math.max(0, percentage))
-    // Ensure any reading activity records at least 1% so book appears in "繼續閱讀"
-    if (percentage === 0 && parts.length >= 2) percentage = 1
   }
-  return request<void>(`/users/${userId}/books/${bookId}/progress`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cfi: progress, percentage }),
-  })
+
+  // Get local version for optimistic locking
+  const local = await getLocalProgress(userId, bookId)
+  const localVersion = local?.version ?? 0
+
+  // Always save to IndexedDB first
+  await saveLocalProgress(userId, bookId, progress, percentage, localVersion, true)
+
+  // Try to sync to server
+  try {
+    const response = await fetch(`${BASE_URL}/users/${userId}/books/${bookId}/progress`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cfi: progress, percentage, version: localVersion || undefined }),
+    })
+
+    const data = await response.json() as ProgressResponse
+
+    if (response.status === 409) {
+      // Conflict — return conflict data for resolution
+      return data
+    }
+
+    if (response.ok) {
+      // Sync succeeded — update local with new version, mark clean
+      await saveLocalProgress(userId, bookId, progress, percentage, data.version, false)
+      return data
+    }
+
+    // Server error — queue for later sync
+    await addToSyncQueue({
+      type: 'progress',
+      userId,
+      bookId,
+      data: { cfi: progress, percentage },
+      localVersion,
+      createdAt: Date.now(),
+    })
+    return null
+  } catch {
+    // Offline — queue for later sync
+    await addToSyncQueue({
+      type: 'progress',
+      userId,
+      bookId,
+      data: { cfi: progress, percentage },
+      localVersion,
+      createdAt: Date.now(),
+    })
+    return null
+  }
 }
 
-// Settings
-async function getSettings(userId: string): Promise<ReaderSettings> {
-  return request<ReaderSettings>(`/users/${userId}/settings`)
-}
-
-async function updateSettings(userId: string, settings: ReaderSettings): Promise<void> {
-  return request<void>(`/users/${userId}/settings`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(settings),
-  })
-}
-
-// Bookmarks
-async function getBookmarks(userId: string): Promise<string[]> {
-  return request<string[]>(`/users/${userId}/bookmarks`)
-}
-
-async function toggleBookmark(userId: string, bookId: string): Promise<void> {
-  return request<void>(`/users/${userId}/books/${bookId}/bookmark`, { method: 'POST' })
-}
-
-// User reading progress (all books)
-async function getUserProgress(userId: string): Promise<Array<{ bookId: string; cfi: string; percentage: number; lastReadAt: number }>> {
-  return request<Array<{ bookId: string; cfi: string; percentage: number; lastReadAt: number }>>(`/users/${userId}/progress`)
-}
-
-// Page bookmarks (閱讀器內頁面書籤)
-export interface PageBookmark {
-  id: string
-  userId: string
+async function getProgress(
+  userId: string,
   bookId: string
-  position: string
-  label: string | null
-  createdAt: number
+): Promise<ProgressResponse | null> {
+  const serverData = await tryRequest<ProgressResponse>(
+    `/users/${userId}/books/${bookId}/progress`
+  )
+  if (serverData) {
+    // Update local if not dirty
+    const local = await getLocalProgress(userId, bookId)
+    if (!local || !local.dirty) {
+      await saveLocalProgress(
+        userId,
+        bookId,
+        serverData.cfi,
+        serverData.percentage,
+        serverData.version,
+        false
+      )
+    }
+    return serverData
+  }
+  // Offline fallback
+  const local = await getLocalProgress(userId, bookId)
+  if (local) {
+    return { cfi: local.cfi, percentage: local.percentage, version: local.version }
+  }
+  return null
 }
 
-async function listPageBookmarks(userId: string, bookId: string): Promise<PageBookmark[]> {
-  return request<PageBookmark[]>(`/users/${userId}/books/${bookId}/page-bookmarks`)
+// ─── Settings ────────────────────────────────────────────────────────────────
+
+interface SettingsResponse extends ReaderSettings {
+  version: number
+  conflict?: boolean
+  serverData?: SettingsResponse
+  serverVersion?: number
 }
 
-async function addPageBookmark(userId: string, bookId: string, position: string, label?: string): Promise<PageBookmark> {
-  return request<PageBookmark>(`/users/${userId}/books/${bookId}/page-bookmarks`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ position, label }),
+async function getSettings(userId: string): Promise<ReaderSettings> {
+  const serverData = await tryRequest<SettingsResponse>(`/users/${userId}/settings`)
+  if (serverData) {
+    const local = await getLocalSettings(userId)
+    if (!local || !local.dirty) {
+      await saveLocalSettings(userId, {
+        writingMode: serverData.writingMode,
+        fontSize: serverData.fontSize,
+        theme: serverData.theme,
+        openccMode: serverData.openccMode,
+        tapZoneLayout: serverData.tapZoneLayout,
+        version: serverData.version ?? 0,
+        dirty: false,
+      })
+    }
+    return serverData
+  }
+  // Offline fallback
+  const local = await getLocalSettings(userId)
+  if (local) {
+    return {
+      writingMode: local.writingMode as ReaderSettings['writingMode'],
+      fontSize: local.fontSize,
+      theme: local.theme as ReaderSettings['theme'],
+      openccMode: local.openccMode as ReaderSettings['openccMode'],
+      tapZoneLayout: local.tapZoneLayout as ReaderSettings['tapZoneLayout'],
+      version: local.version,
+    }
+  }
+  return {
+    writingMode: 'vertical-rl',
+    fontSize: 18,
+    theme: 'light',
+    openccMode: 'none',
+    tapZoneLayout: 'default',
+  }
+}
+
+async function updateSettings(userId: string, settings: ReaderSettings): Promise<SettingsResponse | null> {
+  const local = await getLocalSettings(userId)
+  const localVersion = local?.version ?? 0
+
+  // Always save locally first
+  await saveLocalSettings(userId, {
+    writingMode: settings.writingMode,
+    fontSize: settings.fontSize,
+    theme: settings.theme,
+    openccMode: settings.openccMode,
+    tapZoneLayout: settings.tapZoneLayout,
+    version: localVersion,
+    dirty: true,
   })
-}
 
-async function removePageBookmark(id: string): Promise<void> {
-  return request<void>(`/page-bookmarks/${id}`, { method: 'DELETE' })
-}
+  // Try to sync to server
+  try {
+    const response = await fetch(`${BASE_URL}/users/${userId}/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...settings, version: localVersion || undefined }),
+    })
 
-// Clear reading progress for a book
-async function clearProgress(userId: string, bookId: string): Promise<void> {
-  return request<void>(`/users/${userId}/books/${bookId}/progress`, { method: 'DELETE' })
+    const data = await response.json() as SettingsResponse
+
+    if (response.status === 409) {
+      return data
+    }
+
+    if (response.ok) {
+      await saveLocalSettings(userId, {
+        writingMode: data.writingMode,
+        fontSize: data.fontSize,
+        theme: data.theme,
+        openccMode: data.openccMode,
+        tapZoneLayout: data.tapZoneLayout,
+        version: data.version,
+        dirty: false,
+      })
+      return data
+    }
+
+    await addToSyncQueue({
+      type: 'settings',
+      userId,
+      data: { ...settings },
+      localVersion,
+      createdAt: Date.now(),
+    })
+    return null
+  } catch {
+    await addToSyncQueue({
+      type: 'settings',
+      userId,
+      data: { ...settings },
+      localVersion,
+      createdAt: Date.now(),
+    })
+    return null
+  }
 }
 
 export const api = {
@@ -177,25 +331,13 @@ export const api = {
     list: listUsers,
     create: createUser,
     remove: removeUser,
-    update: updateUser,
   },
   books: {
     list: listBooks,
-    get: getBook,
     upload: uploadBook,
     remove: removeBook,
     updateProgress,
-    getUserProgress,
-    clearProgress,
-  },
-  bookmarks: {
-    list: getBookmarks,
-    toggle: toggleBookmark,
-  },
-  pageBookmarks: {
-    list: listPageBookmarks,
-    add: addPageBookmark,
-    remove: removePageBookmark,
+    getProgress,
   },
   settings: {
     get: getSettings,
