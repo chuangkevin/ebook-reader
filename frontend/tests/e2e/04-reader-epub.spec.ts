@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename)
  * EPUB 閱讀器整合測試（真實後端 + 真實 EPUB）
  */
 
-const TEST_EPUB = path.resolve(__dirname, '../../../ebook/哈利波特一_神秘的魔法石.epub')
+const TEST_EPUB = path.resolve(__dirname, '../../../spike/test.epub')
 
 let testUser: any
 let testBook: any
@@ -21,7 +21,7 @@ test.beforeEach(async () => {
 })
 
 test.afterEach(async () => {
-  if (testBook) await deleteBook(testBook.id, testUser?.id).catch(() => {})
+  if (testBook) await deleteBook(testBook.id).catch(() => {})
   if (testUser) await deleteUser(testUser.id).catch(() => {})
 })
 
@@ -88,7 +88,7 @@ test.describe('EPUB 閱讀器', () => {
       await page.waitForTimeout(600)
     }
     // 確認進度 % 出現在工具列
-    const progressText = page.locator('text=/\\d+%/').first()
+    const progressText = page.locator('text=/\\d+%/')
     await expect(progressText).toBeVisible({ timeout: 5000 })
     await page.screenshot({ path: 'test-results/04-progress.png' })
   })
