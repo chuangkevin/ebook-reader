@@ -1,7 +1,7 @@
 {
-  "name": "ebook-reader-backend",
+  "name": "readflix-backend",
   "version": "1.0.0",
-  "description": "跨裝置電子書閱讀平台後端服務",
+  "description": "Readflix - 跨裝置電子書閱讀平台後端服務",
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/server.ts",

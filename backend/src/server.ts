@@ -13,7 +13,6 @@ import userRoutes from './routes/user.routes';
 import bookRoutes from './routes/book.routes';
 import progressRoutes from './routes/progress.routes';
 import bookmarkRoutes from './routes/bookmark.routes';
-import pageBookmarkRoutes from './routes/pageBookmark.routes';
 import settingsRoutes from './routes/settings.routes';
 
 const ensureDirectories = () => {
@@ -52,7 +51,7 @@ app.get('/health', (_req, res) => {
 // API info
 app.get('/api', (_req, res) => {
   res.json({
-    message: 'Ebook Reader API',
+    message: 'Readflix API',
     version: '1.0.0',
     endpoints: {
       health: '/health',
@@ -68,7 +67,6 @@ app.use('/api', userRoutes);
 app.use('/api', bookRoutes);
 app.use('/api', progressRoutes);
 app.use('/api', bookmarkRoutes);
-app.use('/api', pageBookmarkRoutes);
 app.use('/api', settingsRoutes);
 
 // Error handlers

@@ -8,7 +8,7 @@ export const config = {
   port: parseInt(process.env.PORT || '3003', 10),
 
   database: {
-    path: process.env.DB_PATH || path.join(__dirname, '../../data/db/ebook-reader.sqlite'),
+    path: process.env.DB_PATH || path.join(__dirname, '../../data/db/readflix.sqlite'),
   },
 
   storage: {
