@@ -166,7 +166,11 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
               currentProgressRef.current = { index, anchor: fraction }
               // Suppress progress saves during mode switching to avoid overwriting with reset position
               if (!modeSwitchingRef.current) {
-                onProgressChangeRef.current(`@@${index}@@${fraction}`)
+                // Include page-level info: page within section, pages in section, total sections
+                const page = paginator.page ?? 0
+                const pages = paginator.pages ?? 0
+                const totalSections = paginator.sections?.length ?? 0
+                onProgressChangeRef.current(`@@${index}@@${fraction}@@${page}@@${pages}@@${totalSections}`)
               }
             }
           }

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppBar, Box, IconButton, Toolbar, Typography } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import FullscreenIcon from '@mui/icons-material/Fullscreen'
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useBookStore } from '../stores/bookStore'
@@ -30,9 +32,12 @@ export default function ReaderPage() {
   const readerRef = useRef<EpubReaderHandle | PdfReaderHandle | TxtReaderHandle>(null)
   const readerAreaRef = useRef<HTMLDivElement>(null)
   const [progressPercent, setProgressPercent] = useState(0)
+  const [pageInfo, setPageInfo] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tocOpen, setTocOpen] = useState(false)
   const [toc, setToc] = useState<TocItem[]>([])
+  const [fullscreen, setFullscreen] = useState(false)
+  const [toolbarVisible, setToolbarVisible] = useState(true)
 
   useSwipeNavigation(
     readerAreaRef,
@@ -56,6 +61,33 @@ export default function ReaderPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id])
 
+  // F11-style fullscreen via Fullscreen API (hides browser chrome + URL bar)
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen()
+      } else {
+        await document.exitFullscreen()
+      }
+    } catch { /* ignore if not supported */ }
+  }, [])
+
+  // Sync fullscreen state with browser
+  useEffect(() => {
+    const handler = () => setFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', handler)
+    return () => document.removeEventListener('fullscreenchange', handler)
+  }, [])
+
+  // Exit fullscreen when leaving reader page
+  useEffect(() => {
+    return () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {})
+      }
+    }
+  }, [])
+
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -73,6 +105,10 @@ export default function ReaderPage() {
           e.preventDefault()
           readerRef.current?.prev()
           break
+        case 'Escape':
+          // Escape exits fullscreen (handled by browser), toggle toolbar
+          setToolbarVisible((v) => !v)
+          break
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -83,9 +119,9 @@ export default function ReaderPage() {
     (progress: string) => {
       if (!currentUser || !currentBook) return
 
-      // Parse fraction for display
+      // Parse progress for display
       // PDF:  @@pageNum@@totalPages   -> pageNum/totalPages
-      // EPUB: @@chapterIndex@@scrollFraction  -> scrollFraction (0-1)
+      // EPUB: @@chapterIndex@@scrollFraction@@page@@pages@@totalSections -> page-level
       // TXT:  @@scrollFraction@@1    -> scrollFraction (0-1)
       const parts = progress.split('@@').filter(Boolean)
       if (parts.length >= 2) {
@@ -93,16 +129,31 @@ export default function ReaderPage() {
         const second = parseFloat(parts[1])
         if (currentBook.format === 'pdf' && second > 0) {
           setProgressPercent(Math.round((first / second) * 100))
+          setPageInfo(`${Math.round(first)} / ${Math.round(second)}`)
         } else if (currentBook.format === 'txt') {
           setProgressPercent(Math.round(first * 100))
+          setPageInfo('')
         } else {
-          setProgressPercent(Math.round(second * 100))
+          // EPUB — check if page info is included
+          if (parts.length >= 5) {
+            const page = parseInt(parts[2], 10)
+            const pagesInSection = parseInt(parts[3], 10)
+            const totalSections = parseInt(parts[4], 10)
+            // Use fraction for overall percentage
+            setProgressPercent(Math.round(second * 100))
+            setPageInfo(`${page}/${pagesInSection} · Ch ${first + 1}/${totalSections}`)
+          } else {
+            setProgressPercent(Math.round(second * 100))
+            setPageInfo('')
+          }
         }
       }
 
-      // Update store + persist
-      updateBookProgress(currentBook.id, progress)
-      api.books.updateProgress(currentUser.id, currentBook.id, progress, currentBook.format).catch(() => {
+      // Update store + persist (strip page info, only save position data)
+      const positionParts = progress.split('@@').filter(Boolean).slice(0, 2)
+      const positionProgress = `@@${positionParts.join('@@')}`
+      updateBookProgress(currentBook.id, positionProgress)
+      api.books.updateProgress(currentUser.id, currentBook.id, positionProgress, currentBook.format).catch(() => {
         // Progress save failed silently
       })
     },
@@ -124,14 +175,16 @@ export default function ReaderPage() {
         overflow: 'hidden',
       }}
     >
-      {/* Top toolbar */}
+      {/* Top toolbar — slides up when hidden */}
       <AppBar
         position="static"
         sx={{
-          height: TOOLBAR_HEIGHT,
-          minHeight: TOOLBAR_HEIGHT,
+          height: toolbarVisible ? TOOLBAR_HEIGHT : 0,
+          minHeight: 0,
           bgcolor: '#111',
           boxShadow: 'none',
+          overflow: 'hidden',
+          transition: 'height 0.2s ease',
         }}
       >
         <Toolbar
@@ -141,7 +194,10 @@ export default function ReaderPage() {
           <IconButton
             color="inherit"
             size="small"
-            onClick={() => navigate('/library')}
+            onClick={() => {
+              if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+              navigate('/library')
+            }}
             sx={{ mr: 0.5 }}
           >
             <ArrowBackIcon fontSize="small" />
@@ -167,13 +223,21 @@ export default function ReaderPage() {
             {currentBook.title}
           </Typography>
           <Typography variant="caption" sx={{ color: 'grey.400', ml: 1, flexShrink: 0 }}>
-            {progressPercent}%
+            {pageInfo ? `${pageInfo} · ` : ''}{progressPercent}%
           </Typography>
           <IconButton
             color="inherit"
             size="small"
+            onClick={toggleFullscreen}
+            sx={{ ml: 0.5 }}
+          >
+            {fullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+          </IconButton>
+          <IconButton
+            color="inherit"
+            size="small"
             onClick={() => setSettingsOpen(true)}
-            sx={{ ml: 1 }}
+            sx={{ ml: 0.5 }}
           >
             <SettingsIcon fontSize="small" />
           </IconButton>
