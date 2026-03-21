@@ -31,7 +31,7 @@ export default function UserSelectionScreen() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   useEffect(() => {
     api.users.list()
@@ -73,7 +73,7 @@ export default function UserSelectionScreen() {
     }
   }
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation()
     setDeletingId(id)
     try {
@@ -136,7 +136,7 @@ export default function UserSelectionScreen() {
                   >
                     <Avatar
                       src={user.avatar}
-                      sx={{ width: 64, height: 64, bgcolor: user.avatarColor ?? '#5c6bc0', fontSize: 28 }}
+                      sx={{ width: 64, height: 64, bgcolor: '#5c6bc0', fontSize: 28 }}
                     >
                       {!user.avatar && user.name.charAt(0).toUpperCase()}
                     </Avatar>

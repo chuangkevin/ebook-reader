@@ -11,12 +11,12 @@ function getConverter(mode: 'tw2s' | 's2tw'): ConverterFn {
     if (!tw2sConverter) {
       tw2sConverter = OpenCC.Converter({ from: 'tw', to: 'cn' })
     }
-    return tw2sConverter!
+    return tw2sConverter
   } else {
     if (!s2twConverter) {
       s2twConverter = OpenCC.Converter({ from: 'cn', to: 'tw' })
     }
-    return s2twConverter!
+    return s2twConverter
   }
 }
 

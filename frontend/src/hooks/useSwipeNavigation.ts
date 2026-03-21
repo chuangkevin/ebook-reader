@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
 function useSwipeNavigation(
-  elementRef: React.RefObject<HTMLElement | null>,
+  elementRef: React.RefObject<HTMLElement>,
   onNext: () => void,
   onPrev: () => void,
   threshold: number = 50

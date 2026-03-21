@@ -58,13 +58,6 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
     scheduleSave(updated)
   }
 
-  function handleGap(_: Event, value: number | number[]) {
-    const gap = value as number
-    const updated = { ...settings, gap }
-    setSettings({ gap })
-    scheduleSave(updated)
-  }
-
   function handleTheme(_: React.MouseEvent, value: ReaderSettingsType['theme'] | null) {
     if (!value) return
     const updated = { ...settings, theme: value }
@@ -132,23 +125,6 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
           marks
           valueLabelDisplay="auto"
           valueLabelFormat={(v) => `${v}px`}
-          sx={{ maxWidth: 320 }}
-        />
-      </Box>
-
-      {/* 邊距 */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          邊距：{Math.round((settings.gap ?? 0.06) * 100)}%
-        </Typography>
-        <Slider
-          value={settings.gap ?? 0.06}
-          min={0.02}
-          max={0.15}
-          step={0.01}
-          onChange={handleGap}
-          valueLabelDisplay="auto"
-          valueLabelFormat={(v) => `${Math.round(v * 100)}%`}
           sx={{ maxWidth: 320 }}
         />
       </Box>

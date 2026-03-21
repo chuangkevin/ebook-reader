@@ -12,7 +12,6 @@ export interface TxtReaderHandle {
   next: () => Promise<void>
   prev: () => Promise<void>
   goTo: (href: string) => Promise<void>
-  goToFraction: (fraction: number) => Promise<void>
 }
 
 interface TxtReaderProps {
@@ -22,7 +21,6 @@ interface TxtReaderProps {
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number
   tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
-  onCenterTap?: () => void
   onProgressChange: (progress: string) => void
 }
 
@@ -35,7 +33,7 @@ function parseScrollFraction(progress?: string): number {
 }
 
 const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
+  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onProgressChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const [text, setText] = useState<string>('')
     const [loading, setLoading] = useState(true)
@@ -94,8 +92,6 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
           c.scrollTop = fraction * maxScroll
         }
         progressRestoredRef.current = true
-        // Report initial progress so the book appears in "繼續閱讀"
-        onProgressChangeRef.current(`@@${fraction.toFixed(6)}@@1`)
         setTimeout(() => { scrollingProgrammaticallyRef.current = false }, 100)
       })
       return () => cancelAnimationFrame(raf)
@@ -152,10 +148,6 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
       goTo: async () => {
         // TXT has no chapter navigation
       },
-      goToFraction: async (fraction: number) => {
-        const el = containerRef.current
-        if (el) el.scrollTop = fraction * (el.scrollHeight - el.clientHeight)
-      },
     }))
 
     const onNext = () => scrollForward()
@@ -167,7 +159,6 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
         {tapZoneLayout === 'default' ? (
           <>
             <div className="epub-tap-zone epub-tap-left" onClick={onPrev} />
-            <div className="epub-tap-zone epub-tap-center" onClick={onCenterTap} />
             <div className="epub-tap-zone epub-tap-right" onClick={onNext} />
           </>
         ) : (
@@ -176,7 +167,6 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
               className="epub-tap-zone epub-tap-top"
               onClick={tapZoneLayout === 'bottom-next' ? onPrev : onNext}
             />
-            <div className="epub-tap-zone epub-tap-center-h" onClick={onCenterTap} />
             <div
               className="epub-tap-zone epub-tap-bottom"
               onClick={tapZoneLayout === 'bottom-next' ? onNext : onPrev}
