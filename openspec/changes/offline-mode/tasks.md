@@ -51,12 +51,12 @@
 - [x] Task 6.4: E2E 測試 — 衝突偵測 + 解決流程（2 tests pass，含 progress 和 settings 衝突）
 - [x] Task 6.5: Commit + Push（合併於 Phase 4-6 commit）
 
-### Phase 7: Integration & Polish
+### Phase 7: Integration & Polish ✅ (`3d6a89d`)
 
-- [ ] Task 7.1: 全流程 E2E 測試（離線閱讀 → 上線同步 → 衝突解決）
-- [ ] Task 7.2: 多裝置模擬測試
-- [ ] Task 7.3: 效能優化（大量書籍下載、IndexedDB 批次寫入）
-- [ ] Task 7.4: Commit + Push「feat: offline mode complete」
+- [x] Task 7.1: 全流程 E2E 測試（離線閱讀 → 上線同步 → 衝突解決）
+- [x] Task 7.2: 多裝置模擬測試（進度衝突 409 + settings 衝突 409 + resolve）
+- [x] Task 7.3: 效能驗證（快速翻頁 queue 限制、IndexedDB 持久化、離線書庫載入）
+- [x] Task 7.4: Commit + Push「feat: Phase 7 integration E2E tests」
 
 ## Development Rules
 
