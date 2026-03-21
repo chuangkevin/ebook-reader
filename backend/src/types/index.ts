@@ -26,6 +26,7 @@ export interface ReadingProgress {
   cfi: string | null;
   percentage: number;
   lastReadAt: number;
+  version: number;
 }
 
 export interface BookWithProgress extends Book {

@@ -17,7 +17,7 @@ class SettingsController {
   async update(req: Request, res: Response): Promise<void> {
     try {
       const { userId } = req.params;
-      const { writingMode, fontSize, theme, openccMode, tapZoneLayout } = req.body;
+      const { writingMode, fontSize, theme, openccMode, tapZoneLayout, version } = req.body;
 
       const allowed = {
         writingMode: ['vertical-rl', 'horizontal-tb'],
@@ -54,11 +54,44 @@ class SettingsController {
       if (openccMode !== undefined) partial.openccMode = openccMode;
       if (tapZoneLayout !== undefined) partial.tapZoneLayout = tapZoneLayout;
 
-      const settings = settingsService.upsert(userId, partial as Parameters<typeof settingsService.upsert>[1]);
-      res.json(settings);
+      const result = settingsService.upsert(
+        userId,
+        partial as Parameters<typeof settingsService.upsert>[1],
+        version
+      );
+
+      if ('conflict' in result) {
+        res.status(409).json(result);
+        return;
+      }
+
+      res.json(result);
     } catch (error) {
       logger.error('Failed to update settings:', error);
       res.status(500).json({ error: 'Failed to update settings' });
+    }
+  }
+
+  async resolve(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const { writingMode, fontSize, theme, openccMode, tapZoneLayout } = req.body;
+
+      const partial: Record<string, unknown> = {};
+      if (writingMode !== undefined) partial.writingMode = writingMode;
+      if (fontSize !== undefined) partial.fontSize = fontSize;
+      if (theme !== undefined) partial.theme = theme;
+      if (openccMode !== undefined) partial.openccMode = openccMode;
+      if (tapZoneLayout !== undefined) partial.tapZoneLayout = tapZoneLayout;
+
+      const settings = settingsService.forceUpdate(
+        userId,
+        partial as Parameters<typeof settingsService.forceUpdate>[1]
+      );
+      res.json(settings);
+    } catch (error) {
+      logger.error('Failed to resolve settings conflict:', error);
+      res.status(500).json({ error: 'Failed to resolve settings conflict' });
     }
   }
 }

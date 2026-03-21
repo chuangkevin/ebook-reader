@@ -2,7 +2,6 @@ export interface User {
   id: string
   name: string
   avatar?: string
-  avatarColor?: string
 }
 
 export interface Book {
@@ -13,7 +12,6 @@ export interface Book {
   coverUrl?: string
   progress?: string  // "@@chapterIndex@@scrollFraction" format
   addedAt: string
-  uploadedBy?: string
 }
 
 export interface ReadingProgress {
@@ -24,10 +22,10 @@ export interface ReadingProgress {
 export interface ReaderSettings {
   writingMode: 'vertical-rl' | 'horizontal-tb'
   fontSize: number  // px, default 18
-  gap: number  // fraction of viewport, default 0.06 (6%)
   theme: 'light' | 'sepia' | 'dark'
   openccMode: 'none' | 'tw2s' | 's2tw'
   tapZoneLayout: 'default' | 'bottom-next' | 'bottom-prev'
+  version?: number
 }
 
 export interface TocItem {

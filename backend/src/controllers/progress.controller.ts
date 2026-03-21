@@ -8,7 +8,7 @@ class ProgressController {
       const { userId, bookId } = req.params;
       const progress = progressService.get(userId, bookId);
       if (!progress) {
-        res.json({ userId, bookId, cfi: null, percentage: 0 });
+        res.json({ userId, bookId, cfi: null, percentage: 0, version: 0 });
         return;
       }
       res.json(progress);
@@ -21,6 +21,36 @@ class ProgressController {
   async update(req: Request, res: Response): Promise<void> {
     try {
       const { userId, bookId } = req.params;
+      const { cfi, percentage, version } = req.body;
+
+      if (percentage !== undefined && (typeof percentage !== 'number' || percentage < 0 || percentage > 100)) {
+        res.status(400).json({ error: 'Percentage must be a number between 0 and 100' });
+        return;
+      }
+
+      const result = progressService.upsert(
+        userId,
+        bookId,
+        cfi ?? null,
+        percentage ?? 0,
+        version
+      );
+
+      if ('conflict' in result) {
+        res.status(409).json(result);
+        return;
+      }
+
+      res.json(result);
+    } catch (error) {
+      logger.error('Failed to update progress:', error);
+      res.status(500).json({ error: 'Failed to update progress' });
+    }
+  }
+
+  async resolve(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, bookId } = req.params;
       const { cfi, percentage } = req.body;
 
       if (percentage !== undefined && (typeof percentage !== 'number' || percentage < 0 || percentage > 100)) {
@@ -28,11 +58,11 @@ class ProgressController {
         return;
       }
 
-      const progress = progressService.upsert(userId, bookId, cfi ?? null, percentage ?? 0);
+      const progress = progressService.forceUpdate(userId, bookId, cfi ?? null, percentage ?? 0);
       res.json(progress);
     } catch (error) {
-      logger.error('Failed to update progress:', error);
-      res.status(500).json({ error: 'Failed to update progress' });
+      logger.error('Failed to resolve progress conflict:', error);
+      res.status(500).json({ error: 'Failed to resolve progress conflict' });
     }
   }
 

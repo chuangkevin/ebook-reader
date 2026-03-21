@@ -59,35 +59,10 @@ export function initDatabase(): void {
   `);
 
   // Migration: add format column if missing
-  const booksInfo = db.pragma('table_info(books)') as Array<{ name: string; notnull: number }>;
+  const booksInfo = db.pragma('table_info(books)') as Array<{ name: string }>;
   if (!booksInfo.some(col => col.name === 'format')) {
     db.exec(`ALTER TABLE books ADD COLUMN format TEXT NOT NULL DEFAULT 'epub'`);
     console.log('Added format column to books table');
-  }
-
-  // Migration: make uploaded_by nullable so user deletion doesn't violate NOT NULL
-  // (better-sqlite3 v9+ enables FK enforcement by default; ON DELETE SET NULL conflicts with NOT NULL)
-  const uploadedByCol = booksInfo.find(col => col.name === 'uploaded_by');
-  if (uploadedByCol && (uploadedByCol as any).notnull === 1) {
-    db.exec(`DROP TABLE IF EXISTS books_new`);
-    db.exec(`
-      CREATE TABLE books_new (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        author TEXT DEFAULT 'Unknown',
-        format TEXT NOT NULL DEFAULT 'epub',
-        cover_path TEXT,
-        file_path TEXT NOT NULL,
-        file_size INTEGER NOT NULL,
-        uploaded_by TEXT,
-        uploaded_at INTEGER NOT NULL,
-        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
-      )
-    `);
-    db.exec(`INSERT INTO books_new SELECT * FROM books`);
-    db.exec(`DROP TABLE books`);
-    db.exec(`ALTER TABLE books_new RENAME TO books`);
-    console.log('Migrated books.uploaded_by to nullable');
   }
 
   // Reading progress table
@@ -99,11 +74,19 @@ export function initDatabase(): void {
       cfi TEXT,
       percentage REAL DEFAULT 0,
       last_read_at INTEGER NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
       UNIQUE(user_id, book_id),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
     )
   `);
+
+  // Migration: add version column to reading_progress if missing
+  const progressInfo = db.pragma('table_info(reading_progress)') as Array<{ name: string }>;
+  if (!progressInfo.some(col => col.name === 'version')) {
+    db.exec(`ALTER TABLE reading_progress ADD COLUMN version INTEGER NOT NULL DEFAULT 1`);
+    console.log('Added version column to reading_progress table');
+  }
 
   // Bookmarks (稍後閱讀)
   db.exec(`
@@ -112,20 +95,6 @@ export function initDatabase(): void {
       book_id TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, book_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
-    )
-  `);
-
-  // Page bookmarks (閱讀器內頁面書籤)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS page_bookmarks (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      book_id TEXT NOT NULL,
-      position TEXT NOT NULL,
-      label TEXT,
-      created_at INTEGER NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
     )
@@ -140,15 +109,15 @@ export function initDatabase(): void {
       theme TEXT NOT NULL DEFAULT 'light',
       opencc_mode TEXT NOT NULL DEFAULT 'none',
       tap_zone_layout TEXT NOT NULL DEFAULT 'default',
-      gap REAL NOT NULL DEFAULT 0.06
+      version INTEGER NOT NULL DEFAULT 1
     )
   `);
 
-  // Migration: add gap column if missing
-  try {
-    db.exec(`ALTER TABLE user_settings ADD COLUMN gap REAL NOT NULL DEFAULT 0.06`);
-  } catch {
-    // Column already exists
+  // Migration: add version column to user_settings if missing
+  const settingsInfo = db.pragma('table_info(user_settings)') as Array<{ name: string }>;
+  if (!settingsInfo.some(col => col.name === 'version')) {
+    db.exec(`ALTER TABLE user_settings ADD COLUMN version INTEGER NOT NULL DEFAULT 1`);
+    console.log('Added version column to user_settings table');
   }
 
   // Indexes

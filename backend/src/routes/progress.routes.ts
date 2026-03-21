@@ -6,6 +6,7 @@ const router = Router();
 router.get('/users/:userId/progress', (req, res) => progressController.getAllForUser(req, res));
 router.get('/users/:userId/books/:bookId/progress', (req, res) => progressController.get(req, res));
 router.put('/users/:userId/books/:bookId/progress', (req, res) => progressController.update(req, res));
+router.put('/users/:userId/books/:bookId/progress/resolve', (req, res) => progressController.resolve(req, res));
 router.delete('/users/:userId/books/:bookId/progress', (req, res) => progressController.delete(req, res));
 
 export default router;

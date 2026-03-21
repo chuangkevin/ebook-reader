@@ -10,12 +10,19 @@ interface ProgressRow {
   cfi: string | null;
   percentage: number;
   last_read_at: number;
+  version: number;
 }
 
 interface ProgressWithBookRow extends ProgressRow {
   title: string;
   author: string;
   cover_path: string | null;
+}
+
+export interface ProgressConflict {
+  conflict: true;
+  serverData: ReadingProgress;
+  serverVersion: number;
 }
 
 class ProgressService {
@@ -26,25 +33,67 @@ class ProgressService {
     return row ? this.mapRow(row) : null;
   }
 
-  upsert(userId: string, bookId: string, cfi: string | null, percentage: number): ReadingProgress {
+  upsert(
+    userId: string,
+    bookId: string,
+    cfi: string | null,
+    percentage: number,
+    clientVersion?: number
+  ): ReadingProgress | ProgressConflict {
     const now = Date.now();
     const existing = this.get(userId, bookId);
 
     if (existing) {
+      // Version conflict check
+      if (clientVersion !== undefined && clientVersion !== existing.version) {
+        logger.debug(`Progress conflict: user=${userId}, book=${bookId}, client=${clientVersion}, server=${existing.version}`);
+        return {
+          conflict: true,
+          serverData: existing,
+          serverVersion: existing.version,
+        };
+      }
+
+      const newVersion = existing.version + 1;
       db.prepare(
-        'UPDATE reading_progress SET cfi = ?, percentage = ?, last_read_at = ? WHERE user_id = ? AND book_id = ?'
-      ).run(cfi, percentage, now, userId, bookId);
-      logger.debug(`Progress updated: user=${userId}, book=${bookId}, ${percentage}%`);
-      return { ...existing, cfi, percentage, lastReadAt: now };
+        'UPDATE reading_progress SET cfi = ?, percentage = ?, last_read_at = ?, version = ? WHERE user_id = ? AND book_id = ?'
+      ).run(cfi, percentage, now, newVersion, userId, bookId);
+      logger.debug(`Progress updated: user=${userId}, book=${bookId}, ${percentage}%, v${newVersion}`);
+      return { ...existing, cfi, percentage, lastReadAt: now, version: newVersion };
     }
 
     const id = crypto.randomUUID();
     db.prepare(
-      'INSERT INTO reading_progress (id, user_id, book_id, cfi, percentage, last_read_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO reading_progress (id, user_id, book_id, cfi, percentage, last_read_at, version) VALUES (?, ?, ?, ?, ?, ?, 1)'
     ).run(id, userId, bookId, cfi, percentage, now);
     logger.debug(`Progress created: user=${userId}, book=${bookId}, ${percentage}%`);
 
-    return { id, userId, bookId, cfi, percentage, lastReadAt: now };
+    return { id, userId, bookId, cfi, percentage, lastReadAt: now, version: 1 };
+  }
+
+  forceUpdate(
+    userId: string,
+    bookId: string,
+    cfi: string | null,
+    percentage: number
+  ): ReadingProgress {
+    const now = Date.now();
+    const existing = this.get(userId, bookId);
+
+    if (existing) {
+      const newVersion = existing.version + 1;
+      db.prepare(
+        'UPDATE reading_progress SET cfi = ?, percentage = ?, last_read_at = ?, version = ? WHERE user_id = ? AND book_id = ?'
+      ).run(cfi, percentage, now, newVersion, userId, bookId);
+      logger.debug(`Progress force-updated: user=${userId}, book=${bookId}, ${percentage}%, v${newVersion}`);
+      return { ...existing, cfi, percentage, lastReadAt: now, version: newVersion };
+    }
+
+    const id = crypto.randomUUID();
+    db.prepare(
+      'INSERT INTO reading_progress (id, user_id, book_id, cfi, percentage, last_read_at, version) VALUES (?, ?, ?, ?, ?, ?, 1)'
+    ).run(id, userId, bookId, cfi, percentage, now);
+    return { id, userId, bookId, cfi, percentage, lastReadAt: now, version: 1 };
   }
 
   delete(userId: string, bookId: string): boolean {
@@ -80,6 +129,7 @@ class ProgressService {
       cfi: row.cfi,
       percentage: row.percentage,
       lastReadAt: row.last_read_at,
+      version: row.version,
     };
   }
 }
