@@ -5,7 +5,7 @@ dotenv.config();
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT || '3003', 10),
+  port: parseInt(process.env.PORT || '4003', 10),
 
   database: {
     path: process.env.DB_PATH || path.join(__dirname, '../../data/db/readflix.sqlite'),
@@ -21,7 +21,7 @@ export const config = {
   },
 
   cors: {
-    allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
+    allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:4173'],
   },
 
   logging: {

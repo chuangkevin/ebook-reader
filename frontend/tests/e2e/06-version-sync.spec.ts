@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const TEST_EPUB = path.resolve(__dirname, '../fixtures/test-minimal.epub')
-const API_BASE = 'http://localhost:3003/api'
+const API_BASE = 'http://localhost:4003/api'
 
 let testUser: any
 let testBook: any

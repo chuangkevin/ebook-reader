@@ -8,7 +8,7 @@
 import fs from 'fs'
 import path from 'path'
 
-const API_BASE = 'http://localhost:3003/api'
+const API_BASE = 'http://localhost:4003/api'
 
 export interface TestUser {
   id: string
@@ -118,11 +118,8 @@ export async function cleanupBookByTitle(title: string): Promise<void> {
   }
 }
 
-export async function deleteBook(id: string, uploadedBy?: string): Promise<void> {
-  const url = uploadedBy
-    ? `${API_BASE}/books/${id}?requestedBy=${encodeURIComponent(uploadedBy)}`
-    : `${API_BASE}/books/${id}`
-  const res = await fetch(url, { method: 'DELETE' })
+export async function deleteBook(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/books/${id}`, { method: 'DELETE' })
   if (!res.ok && res.status !== 404) {
     throw new Error(`deleteBook(${id}) failed (${res.status})`)
   }
@@ -141,11 +138,11 @@ export async function listBooks(): Promise<TestBook[]> {
  */
 export async function assertBackendReady(): Promise<void> {
   try {
-    const res = await fetch('http://localhost:3003/health')
+    const res = await fetch('http://localhost:4003/health')
     if (!res.ok) throw new Error(`status ${res.status}`)
   } catch (err) {
     throw new Error(
-      `後端未啟動 (http://localhost:3003/health 無法連線)。請先執行後端再跑整合測試。\n原始錯誤：${err}`
+      `後端未啟動 (http://localhost:4003/health 無法連線)。請先執行後端再跑整合測試。\n原始錯誤：${err}`
     )
   }
 }
