@@ -41,13 +41,22 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.DEPLOY_SERVER_IP }} >> ~/.ssh/known_hosts
 
+      - name: Sync docker-compose.yml to server
+        env:
+          DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_SERVER_IP}" "mkdir -p '${DEPLOY_PATH}'"
+          scp -i ~/.ssh/deploy_key docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_SERVER_IP}:${DEPLOY_PATH}/docker-compose.yml"
+
       - name: Deploy via SSH
         env:
           DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          ssh -i ~/.ssh/deploy_key ${DEPLOY_USER}@${DEPLOY_SERVER_IP} '
+          ssh -i ~/.ssh/deploy_key ${DEPLOY_USER}@${DEPLOY_SERVER_IP} "
             set -e
 
             retry_pull() {
@@ -55,48 +64,48 @@ jobs:
               local attempt=1
               local delay=10
 
-              while [ $attempt -le $max_attempts ]; do
-                echo "Pulling Docker images (attempt $attempt/$max_attempts)..."
+              while [ \$attempt -le \$max_attempts ]; do
+                echo \"Pulling Docker images (attempt \$attempt/\$max_attempts)...\"
                 if docker compose -f docker-compose.yml pull; then
-                  echo "Pull successful!"
+                  echo \"Pull successful!\"
                   return 0
                 fi
 
-                if [ $attempt -lt $max_attempts ]; then
-                  echo "Pull failed, retrying in ${delay}s..."
-                  sleep $delay
-                  delay=$((delay * 2))
+                if [ \$attempt -lt \$max_attempts ]; then
+                  echo \"Pull failed, retrying in \${delay}s...\"
+                  sleep \$delay
+                  delay=\$((delay * 2))
                 fi
-                attempt=$((attempt + 1))
+                attempt=\$((attempt + 1))
               done
 
-              echo "Pull failed after $max_attempts attempts"
+              echo \"Pull failed after \$max_attempts attempts\"
               return 1
             }
 
-            echo "Navigating to deployment directory..."
-            cd '"${DEPLOY_PATH}"'
+            echo \"Navigating to deployment directory...\"
+            cd \"${DEPLOY_PATH}\"
 
             retry_pull
 
-            echo "Force removing any leftover containers..."
-            docker rm -f ebook-reader-backend ebook-reader-frontend 2>/dev/null || true
+            echo \"Force removing any leftover containers...\"
+            docker rm -f readflix-backend readflix-frontend 2>/dev/null || true
 
-            echo "Stopping existing containers..."
+            echo \"Stopping existing containers...\"
             docker compose -f docker-compose.yml down --remove-orphans --volumes=false
 
-            echo "Removing stale networks..."
-            docker network rm ebook-reader_ebook-reader-network 2>/dev/null || true
+            echo \"Removing stale networks...\"
+            docker network rm readflix_readflix-network 2>/dev/null || true
 
-            echo "Starting updated containers..."
+            echo \"Starting updated containers...\"
             docker compose -f docker-compose.yml up -d --force-recreate
 
-            echo "Cleaning up old images..."
-            docker image prune -af --filter "until=24h" || true
+            echo \"Cleaning up old images...\"
+            docker image prune -af --filter \"until=24h\" || true
 
-            echo "Deployment completed successfully!"
+            echo \"Deployment completed successfully!\"
             docker compose -f docker-compose.yml ps
-          '
+          "
 
       - name: Health Check
         run: |
@@ -113,8 +122,8 @@ jobs:
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Server**: \`${{ secrets.DEPLOY_SERVER_IP }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
-          echo "  - Frontend: \`${{ env.DOCKERHUB_USERNAME }}/ebook-reader-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "  - Backend: \`${{ env.DOCKERHUB_USERNAME }}/ebook-reader-backend:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - Frontend: \`${{ env.DOCKERHUB_USERNAME }}/readflix-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - Backend: \`${{ env.DOCKERHUB_USERNAME }}/readflix-backend:latest\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Deployed at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 

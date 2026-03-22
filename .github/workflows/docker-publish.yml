@@ -39,7 +39,7 @@ jobs:
           file: ./frontend/Dockerfile
           platforms: linux/arm64
           push: true
-          tags: ${{ env.DOCKERHUB_USERNAME }}/ebook-reader-frontend:latest
+          tags: ${{ env.DOCKERHUB_USERNAME }}/readflix-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
@@ -51,7 +51,7 @@ jobs:
           file: ./backend/Dockerfile
           platforms: linux/arm64
           push: true
-          tags: ${{ env.DOCKERHUB_USERNAME }}/ebook-reader-backend:latest
+          tags: ${{ env.DOCKERHUB_USERNAME }}/readflix-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
@@ -60,5 +60,5 @@ jobs:
         run: |
           echo "## Docker Images Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Frontend: \`${{ env.DOCKERHUB_USERNAME }}/ebook-reader-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Backend: \`${{ env.DOCKERHUB_USERNAME }}/ebook-reader-backend:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: \`${{ env.DOCKERHUB_USERNAME }}/readflix-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: \`${{ env.DOCKERHUB_USERNAME }}/readflix-backend:latest\`" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,26 @@
+networks:
+  readflix-network:
+    driver: bridge
+
+services:
+  frontend:
+    image: kevin950805/readflix-frontend:latest
+    container_name: readflix-frontend
+    ports:
+      - "7123:80"
+    depends_on:
+      - backend
+    networks:
+      - readflix-network
+    restart: unless-stopped
+
+  backend:
+    image: kevin950805/readflix-backend:latest
+    container_name: readflix-backend
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - readflix-network
+    restart: unless-stopped
