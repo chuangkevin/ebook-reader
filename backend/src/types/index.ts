@@ -17,6 +17,7 @@ export interface Book {
   fileSize: number;
   uploadedBy: string;
   uploadedAt: number;
+  collection: string | null;
 }
 
 export interface ReadingProgress {

@@ -54,12 +54,14 @@ class BookController {
       } catch { /* 保留原始值 */ }
 
       const format = getFormatFromFilename(originalName);
+      const collection = req.body.collection ? String(req.body.collection).trim() || null : null;
       const book = await bookService.create(
         req.file.path,
         req.file.size,
         uploadedBy,
         originalName,
-        format
+        format,
+        collection
       );
       res.status(201).json(book);
     } catch (error) {

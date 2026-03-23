@@ -14,6 +14,7 @@ interface BookMetadata {
 interface BookRow {
   id: string; title: string; author: string; format: string; cover_path: string | null;
   file_path: string; file_size: number; uploaded_by: string; uploaded_at: number;
+  collection: string | null;
 }
 
 class BookService {
@@ -32,7 +33,7 @@ class BookService {
     return row ? this.mapRow(row) : null;
   }
 
-  async create(filePath: string, fileSize: number, uploadedBy: string, originalName: string, format: BookFormat): Promise<Book> {
+  async create(filePath: string, fileSize: number, uploadedBy: string, originalName: string, format: BookFormat, collection?: string | null): Promise<Book> {
     const id = crypto.randomUUID();
     const now = Date.now();
 
@@ -70,14 +71,16 @@ class BookService {
       }
     }
 
+    const normalizedCollection = collection ? collection.trim() || null : null;
+
     db.prepare(
-      'INSERT INTO books (id, title, author, format, cover_path, file_path, file_size, uploaded_by, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, metadata.title, metadata.author, format, coverPath, filePath, fileSize, uploadedBy, now);
+      'INSERT INTO books (id, title, author, format, cover_path, file_path, file_size, uploaded_by, uploaded_at, collection) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, metadata.title, metadata.author, format, coverPath, filePath, fileSize, uploadedBy, now, normalizedCollection);
 
     logger.info(`Book created: ${metadata.title} [${format}] (${id})`);
 
     return {
-      id, title: metadata.title, author: metadata.author, format, coverPath, filePath, fileSize, uploadedBy, uploadedAt: now,
+      id, title: metadata.title, author: metadata.author, format, coverPath, filePath, fileSize, uploadedBy, uploadedAt: now, collection: normalizedCollection,
     };
   }
 
@@ -261,6 +264,7 @@ class BookService {
       fileSize: row.file_size,
       uploadedBy: row.uploaded_by,
       uploadedAt: row.uploaded_at,
+      collection: row.collection ?? null,
     };
   }
 }

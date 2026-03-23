@@ -24,6 +24,8 @@ export interface TestBook {
   coverUrl: string | null
   filePath?: string
   addedAt: string
+  uploadedBy?: string
+  collection?: string | null
 }
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -75,7 +77,8 @@ export async function cleanupUsersWithPrefix(prefix: string): Promise<void> {
  */
 export async function uploadBook(
   filePath: string,
-  uploadedBy: number
+  uploadedBy: string | number,
+  options?: { collection?: string | null }
 ): Promise<TestBook> {
   const doUpload = async (): Promise<Response> => {
     const buffer = fs.readFileSync(filePath)
@@ -84,6 +87,7 @@ export async function uploadBook(
     const form = new FormData()
     form.append('file', blob, filename)
     form.append('uploadedBy', String(uploadedBy))
+    if (options?.collection) form.append('collection', options.collection)
     return fetch(`${API_BASE}/books`, { method: 'POST', body: form })
   }
 

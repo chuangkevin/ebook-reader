@@ -14,6 +14,7 @@ export interface Book {
   progress?: string  // "@@chapterIndex@@scrollFraction" format
   addedAt: string
   uploadedBy?: string
+  collection?: string | null
 }
 
 export interface ReadingProgress {

@@ -15,26 +15,31 @@ import {
   DialogContentText,
   DialogTitle,
   Drawer,
-  Fab,
   IconButton,
   LinearProgress,
   Skeleton,
+  SpeedDial,
+  SpeedDialAction,
+  SpeedDialIcon,
   TextField,
   Tooltip,
   Toolbar,
   Typography,
 } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
+import FolderIcon from '@mui/icons-material/Folder'
 import PersonIcon from '@mui/icons-material/Person'
 import SwitchAccountIcon from '@mui/icons-material/SwitchAccount'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { useUserStore } from '../stores/userStore'
 import { useBookStore } from '../stores/bookStore'
 import { api } from '../services/api.service'
 import type { Book } from '../types/index'
+import UploadDialog from '../components/UploadDialog'
+import type { UploadFile } from '../components/UploadDialog'
 
 // Parse progress string (new format: @@chapterIndex@@fraction@@totalSections, old: @@idx@@fraction)
 function parseProgressPercent(progress?: string): number {
@@ -65,6 +70,24 @@ function placeholderColor(title: string): string {
   let hash = 0
   for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash)
   return PLACEHOLDER_COLORS[Math.abs(hash) % PLACEHOLDER_COLORS.length]
+}
+
+function groupBooksByCollection(books: Book[]): { collection: string | null; books: Book[] }[] {
+  const map = new Map<string | null, Book[]>()
+  for (const book of books) {
+    const key = book.collection ?? null
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(book)
+  }
+  const result: { collection: string | null; books: Book[] }[] = []
+  const namedCollections = ([...map.keys()].filter(k => k !== null) as string[]).sort()
+  for (const col of namedCollections) {
+    result.push({ collection: col, books: map.get(col)! })
+  }
+  if (map.has(null)) {
+    result.push({ collection: null, books: map.get(null)! })
+  }
+  return result
 }
 
 interface BookCardProps {
@@ -226,7 +249,10 @@ export default function BookLibrary() {
   const [profileName, setProfileName] = useState('')
   const [profileColor, setProfileColor] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const multiFileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async () => {
     if (!currentUser) { navigate('/'); return }
@@ -238,7 +264,6 @@ export default function BookLibrary() {
         api.books.getUserProgress(currentUser.id),
       ])
       const progMap = new Map(progressData.map(p => [p.bookId, { cfi: p.cfi, percentage: p.percentage, lastReadAt: p.lastReadAt }]))
-      // Merge saved progress (cfi) back into each book so reader can restore position
       const booksWithProgress = booksData.map(b => {
         const prog = progMap.get(b.id)
         return prog ? { ...b, progress: prog.cfi } : b
@@ -276,16 +301,38 @@ export default function BookLibrary() {
     return { continueReading: reading, readLater: later, otherBooks: other }
   }, [books, progressMap, bookmarkSet])
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !currentUser) return
+  const collectionGroups = useMemo(() => groupBooksByCollection(otherBooks), [otherBooks])
+  const hasCollections = collectionGroups.some(g => g.collection !== null)
+
+  function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files || files.length === 0 || !currentUser) return
     e.target.value = ''
-    try {
-      const book = await api.books.upload(file, currentUser.id)
-      setBooks([...books, book])
-    } catch {
-      // ignore
-    }
+    const uploadList: UploadFile[] = Array.from(files).map(f => ({ file: f, collection: null }))
+    setUploadFiles(uploadList)
+    setUploadOpen(true)
+  }
+
+  function handleFolderSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files || files.length === 0 || !currentUser) return
+    e.target.value = ''
+    const uploadList: UploadFile[] = Array.from(files)
+      .filter(f => /\.(epub|pdf|txt)$/i.test(f.name))
+      .map(f => {
+        // webkitRelativePath: "FolderName/book.epub" → collection = "FolderName"
+        const parts = f.webkitRelativePath.split('/')
+        const collection = parts.length >= 2 ? parts[0] : null
+        return { file: f, collection }
+      })
+    if (uploadList.length === 0) return
+    setUploadFiles(uploadList)
+    setUploadOpen(true)
+  }
+
+  function handleUploadDone() {
+    setUploadOpen(false)
+    loadData()
   }
 
   async function handleDelete(book: Book) {
@@ -409,18 +456,49 @@ export default function BookLibrary() {
               </ScrollRow>
             )}
 
-            {/* 書庫 */}
-            {otherBooks.length > 0 && (
-              <Box sx={{ px: 2 }}>
-                <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
-                  書庫
-                </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
-                  {otherBooks.map((book) => (
-                    <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
-                  ))}
+            {/* 書庫 — 分類或一般顯示 */}
+            {hasCollections ? (
+              <>
+                {/* Named collection scroll rows */}
+                {collectionGroups.filter(g => g.collection !== null).map(g => (
+                  <ScrollRow key={g.collection} title={g.collection!}>
+                    {g.books.map(book => (
+                      <Box key={book.id} sx={{ width: { xs: '42vw', sm: 160 }, minWidth: 130, maxWidth: 200, flexShrink: 0 }}>
+                        <BookCard {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
+                      </Box>
+                    ))}
+                  </ScrollRow>
+                ))}
+                {/* Uncategorized books */}
+                {(() => {
+                  const uncategorized = collectionGroups.find(g => g.collection === null)
+                  if (!uncategorized || uncategorized.books.length === 0) return null
+                  return (
+                    <Box sx={{ px: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>其他書籍</Typography>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
+                        {uncategorized.books.map(book => (
+                          <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
+                        ))}
+                      </Box>
+                    </Box>
+                  )
+                })()}
+              </>
+            ) : (
+              /* No collections — original grid display */
+              otherBooks.length > 0 && (
+                <Box sx={{ px: 2 }}>
+                  <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
+                    書庫
+                  </Typography>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
+                    {otherBooks.map((book) => (
+                      <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
+                    ))}
+                  </Box>
                 </Box>
-              </Box>
+              )
             )}
 
             {books.length === 0 && (
@@ -433,14 +511,52 @@ export default function BookLibrary() {
         )}
       </Box>
 
-      <input ref={fileInputRef} type="file" accept=".epub,.pdf,.txt" aria-label="上傳書籍" title="上傳書籍" className="hidden-file-input" onChange={handleFileChange} />
-      <Fab
-        color="primary"
+      {/* Hidden file inputs */}
+      <input
+        ref={multiFileInputRef}
+        type="file"
+        accept=".epub,.pdf,.txt"
+        multiple
+        aria-label="選擇書籍檔案"
+        title="選擇書籍檔案"
+        className="hidden-file-input"
+        onChange={handleFilesSelected}
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        // @ts-ignore — webkitdirectory is not in React's types
+        webkitdirectory=""
+        aria-label="選擇書籍資料夾"
+        title="選擇書籍資料夾"
+        className="hidden-file-input"
+        onChange={handleFolderSelected}
+      />
+
+      <SpeedDial
+        ariaLabel="上傳書籍"
         sx={{ position: 'fixed', bottom: 24, right: 24 }}
-        onClick={() => fileInputRef.current?.click()}
+        icon={<SpeedDialIcon />}
       >
-        <AddIcon />
-      </Fab>
+        <SpeedDialAction
+          icon={<FolderIcon />}
+          tooltipTitle="選擇資料夾"
+          onClick={() => folderInputRef.current?.click()}
+        />
+        <SpeedDialAction
+          icon={<UploadFileIcon />}
+          tooltipTitle="選擇檔案"
+          onClick={() => multiFileInputRef.current?.click()}
+        />
+      </SpeedDial>
+
+      <UploadDialog
+        open={uploadOpen}
+        files={uploadFiles}
+        userId={currentUser?.id ?? ''}
+        onClose={() => setUploadOpen(false)}
+        onAllDone={handleUploadDone}
+      />
 
       <Dialog open={!!confirmBook} onClose={() => setConfirmBook(null)}>
         <DialogTitle>確認刪除</DialogTitle>

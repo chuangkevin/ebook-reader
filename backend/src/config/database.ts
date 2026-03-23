@@ -160,6 +160,13 @@ export function initDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id);
   `);
 
+  // Migration: add collection column to books if missing
+  const booksColumns = db.pragma('table_info(books)') as Array<{ name: string }>
+  if (!booksColumns.some(col => col.name === 'collection')) {
+    db.exec(`ALTER TABLE books ADD COLUMN collection TEXT DEFAULT NULL`)
+    console.log('Added collection column to books table')
+  }
+
   console.log('Database initialized successfully');
 }
 

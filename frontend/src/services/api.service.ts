@@ -1,6 +1,7 @@
 import type { User, Book, ReaderSettings } from '../types/index'
 
 const BASE_URL = '/api'
+const API_BASE = BASE_URL
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${url}`, options)
@@ -50,6 +51,7 @@ function normalizeBook(raw: any): Book {
     progress: raw.progress,
     addedAt: raw.uploadedAt ? String(raw.uploadedAt) : '',
     uploadedBy: raw.uploadedBy,
+    collection: raw.collection ?? null,
   }
 }
 
@@ -64,15 +66,37 @@ async function getBook(bookId: string): Promise<Book> {
   return normalizeBook(raw)
 }
 
-async function uploadBook(file: File, userId: string): Promise<Book> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('uploadedBy', String(userId))
-  const raw = await request<any>('/books', {
-    method: 'POST',
-    body: formData,
+async function uploadBook(
+  file: File,
+  userId: string,
+  options?: { collection?: string | null; onProgress?: (percent: number) => void }
+): Promise<Book> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('uploadedBy', String(userId))
+    if (options?.collection) formData.append('collection', options.collection)
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_BASE}/books`)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && options?.onProgress) {
+        options.onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+    }
+    xhr.onload = () => {
+      if (xhr.status === 201) {
+        try { resolve(normalizeBook(JSON.parse(xhr.responseText))) }
+        catch { reject(new Error('Invalid response')) }
+      } else {
+        const err = new Error(xhr.responseText || String(xhr.status))
+        ;(err as any).status = xhr.status
+        reject(err)
+      }
+    }
+    xhr.onerror = () => reject(new Error('Network error'))
+    xhr.send(formData)
   })
-  return normalizeBook(raw)
 }
 
 async function removeBook(bookId: string, userId: string): Promise<void> {
