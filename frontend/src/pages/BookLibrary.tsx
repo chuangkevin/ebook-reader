@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { extractBookTitle } from '../utils/epubMeta'
 import { useNavigate } from 'react-router-dom'
 import {
   AppBar,
@@ -318,14 +319,14 @@ export default function BookLibrary() {
       }
       document.body.appendChild(input)
 
-      input.addEventListener('change', () => {
+      input.addEventListener('change', async () => {
         const files = input.files
         document.body.removeChild(input)
         if (!files || files.length === 0 || !currentUser) return
 
-        let uploadList: UploadFile[]
+        let baseList: UploadFile[]
         if (folder) {
-          uploadList = Array.from(files)
+          baseList = Array.from(files)
             .filter(f => /\.(epub|pdf|txt)$/i.test(f.name))
             .map(f => {
               const parts = f.webkitRelativePath.split('/')
@@ -336,9 +337,26 @@ export default function BookLibrary() {
               return { file: f, collection }
             })
         } else {
-          uploadList = Array.from(files).map(f => ({ file: f, collection: null }))
+          baseList = Array.from(files).map(f => ({ file: f, collection: null }))
         }
-        if (uploadList.length === 0) return
+        if (baseList.length === 0) return
+
+        // Extract metadata and pre-check duplicates before opening dialog
+        const existingTitleSet = new Set(
+          books.map(b => b.title.trim().toLowerCase())
+        )
+        const results = await Promise.allSettled(
+          baseList.map(uf => extractBookTitle(uf.file))
+        )
+        const uploadList: UploadFile[] = baseList.map((uf, i) => {
+          const resolvedTitle = results[i].status === 'fulfilled'
+            ? (results[i] as PromiseFulfilledResult<string | null>).value ?? undefined
+            : undefined
+          const effectiveTitle = resolvedTitle ?? uf.file.name.replace(/\.(epub|pdf|txt)$/i, '')
+          const preMarkedDuplicate = existingTitleSet.has(effectiveTitle.trim().toLowerCase())
+          return { ...uf, resolvedTitle, preMarkedDuplicate }
+        })
+
         setUploadFiles(uploadList)
         setUploadOpen(true)
       })

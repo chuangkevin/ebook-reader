@@ -12,6 +12,8 @@ import { api } from '../services/api.service'
 export interface UploadFile {
   file: File
   collection: string | null
+  resolvedTitle?: string        // extracted from metadata before upload
+  preMarkedDuplicate?: boolean  // if true, skip upload and show as duplicate
 }
 
 type ItemStatus = 'pending' | 'uploading' | 'done' | 'duplicate' | 'error'
@@ -38,7 +40,11 @@ export default function UploadDialog({ open, files, userId, onClose, onAllDone }
 
   useEffect(() => {
     if (!open) { startedRef.current = false; return }
-    setItems(files.map(f => ({ ...f, status: 'pending', progress: 0 })))
+    setItems(files.map(f => ({
+      ...f,
+      status: f.preMarkedDuplicate ? 'duplicate' : 'pending',
+      progress: 0,
+    })))
     startedRef.current = false
   }, [open, files])
 
@@ -50,7 +56,7 @@ export default function UploadDialog({ open, files, userId, onClose, onAllDone }
   }, [open, items.length])
 
   async function runUploads() {
-    const queue = items.map((_, i) => i)
+    const queue = items.map((_, i) => i).filter(i => items[i].status !== 'duplicate')
     const active = new Set<number>()
 
     const uploadOne = async (idx: number) => {
@@ -108,7 +114,7 @@ export default function UploadDialog({ open, files, userId, onClose, onAllDone }
           <Box key={i} sx={{ mb: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {item.collection ? `${item.collection}/` : ''}{item.file.name}
+                {item.collection ? `${item.collection}/` : ''}{item.resolvedTitle ?? item.file.name}
               </Typography>
               {item.status === 'done' && <CheckCircleIcon color="success" fontSize="small" />}
               {item.status === 'duplicate' && <WarningAmberIcon color="warning" fontSize="small" />}
