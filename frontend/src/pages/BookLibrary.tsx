@@ -342,9 +342,8 @@ export default function BookLibrary() {
         if (baseList.length === 0) return
 
         // Extract metadata and pre-check duplicates before opening dialog
-        const existingTitleSet = new Set(
-          books.map(b => b.title.trim().toLowerCase())
-        )
+        const norm = (s: string) => s.trim().toLowerCase()
+        const existingTitleSet = new Set(books.map(b => norm(b.title)))
         const results = await Promise.allSettled(
           baseList.map(uf => extractBookTitle(uf.file))
         )
@@ -352,8 +351,11 @@ export default function BookLibrary() {
           const resolvedTitle = results[i].status === 'fulfilled'
             ? (results[i] as PromiseFulfilledResult<string | null>).value ?? undefined
             : undefined
-          const effectiveTitle = resolvedTitle ?? uf.file.name.replace(/\.(epub|pdf|txt)$/i, '')
-          const preMarkedDuplicate = existingTitleSet.has(effectiveTitle.trim().toLowerCase())
+          const filenameStem = uf.file.name.replace(/\.(epub|pdf|txt)$/i, '')
+          // Match by: 1) extracted EPUB title  2) filename stem (covers TXT/PDF or when EPUB parse fails)
+          const preMarkedDuplicate =
+            (resolvedTitle !== undefined && existingTitleSet.has(norm(resolvedTitle))) ||
+            existingTitleSet.has(norm(filenameStem))
           return { ...uf, resolvedTitle, preMarkedDuplicate }
         })
 
