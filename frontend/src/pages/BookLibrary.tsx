@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AppBar,
@@ -251,8 +251,6 @@ export default function BookLibrary() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
   const [uploadOpen, setUploadOpen] = useState(false)
-  const multiFileInputRef = useRef<HTMLInputElement>(null)
-  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async () => {
     if (!currentUser) { navigate('/'); return }
@@ -304,30 +302,49 @@ export default function BookLibrary() {
   const collectionGroups = useMemo(() => groupBooksByCollection(otherBooks), [otherBooks])
   const hasCollections = collectionGroups.some(g => g.collection !== null)
 
-  function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files
-    if (!files || files.length === 0 || !currentUser) return
-    e.target.value = ''
-    const uploadList: UploadFile[] = Array.from(files).map(f => ({ file: f, collection: null }))
-    setUploadFiles(uploadList)
-    setUploadOpen(true)
-  }
+  function openFilePicker(folder: boolean) {
+    // setTimeout(0) lets the SpeedDial backdrop close before the file picker opens
+    setTimeout(() => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.style.position = 'fixed'
+      input.style.opacity = '0'
+      input.style.pointerEvents = 'none'
+      if (folder) {
+        input.setAttribute('webkitdirectory', '')
+      } else {
+        input.multiple = true
+        input.accept = '.epub,.pdf,.txt'
+      }
+      document.body.appendChild(input)
 
-  function handleFolderSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files
-    if (!files || files.length === 0 || !currentUser) return
-    e.target.value = ''
-    const uploadList: UploadFile[] = Array.from(files)
-      .filter(f => /\.(epub|pdf|txt)$/i.test(f.name))
-      .map(f => {
-        // webkitRelativePath: "FolderName/book.epub" → collection = "FolderName"
-        const parts = f.webkitRelativePath.split('/')
-        const collection = parts.length >= 2 ? parts[0] : null
-        return { file: f, collection }
+      input.addEventListener('change', () => {
+        const files = input.files
+        document.body.removeChild(input)
+        if (!files || files.length === 0 || !currentUser) return
+
+        let uploadList: UploadFile[]
+        if (folder) {
+          uploadList = Array.from(files)
+            .filter(f => /\.(epub|pdf|txt)$/i.test(f.name))
+            .map(f => {
+              const parts = f.webkitRelativePath.split('/')
+              // parts[0] = selected root folder (skip)
+              // parts.length === 2 → root-level file → no collection
+              // parts.length >= 3 → in subfolder → collection = subfolder name
+              const collection = parts.length >= 3 ? parts[1] : null
+              return { file: f, collection }
+            })
+        } else {
+          uploadList = Array.from(files).map(f => ({ file: f, collection: null }))
+        }
+        if (uploadList.length === 0) return
+        setUploadFiles(uploadList)
+        setUploadOpen(true)
       })
-    if (uploadList.length === 0) return
-    setUploadFiles(uploadList)
-    setUploadOpen(true)
+
+      input.click()
+    }, 0)
   }
 
   function handleUploadDone() {
@@ -511,28 +528,6 @@ export default function BookLibrary() {
         )}
       </Box>
 
-      {/* Hidden file inputs */}
-      <input
-        ref={multiFileInputRef}
-        type="file"
-        accept=".epub,.pdf,.txt"
-        multiple
-        aria-label="選擇書籍檔案"
-        title="選擇書籍檔案"
-        className="hidden-file-input"
-        onChange={handleFilesSelected}
-      />
-      <input
-        ref={folderInputRef}
-        type="file"
-        // @ts-ignore — webkitdirectory is not in React's types
-        webkitdirectory=""
-        aria-label="選擇書籍資料夾"
-        title="選擇書籍資料夾"
-        className="hidden-file-input"
-        onChange={handleFolderSelected}
-      />
-
       <SpeedDial
         ariaLabel="上傳書籍"
         sx={{ position: 'fixed', bottom: 24, right: 24 }}
@@ -541,12 +536,12 @@ export default function BookLibrary() {
         <SpeedDialAction
           icon={<FolderIcon />}
           tooltipTitle="選擇資料夾"
-          onClick={() => folderInputRef.current?.click()}
+          onClick={() => openFilePicker(true)}
         />
         <SpeedDialAction
           icon={<UploadFileIcon />}
           tooltipTitle="選擇檔案"
-          onClick={() => multiFileInputRef.current?.click()}
+          onClick={() => openFilePicker(false)}
         />
       </SpeedDial>
 
