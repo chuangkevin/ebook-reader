@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Box, Button, Dialog, DialogContent, DialogTitle, IconButton,
-  LinearProgress, Typography,
+  Alert,
+  Box,
+  LinearProgress,
+  Paper,
+  Snackbar,
+  Typography,
 } from '@mui/material'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import CloseIcon from '@mui/icons-material/Close'
-import ErrorIcon from '@mui/icons-material/Error'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { api } from '../services/api.service'
 
 export interface UploadFile {
@@ -22,6 +22,7 @@ interface UploadItem extends UploadFile {
   status: ItemStatus
   progress: number
   errorMsg?: string
+  // resolvedTitle is inherited from UploadFile
 }
 
 interface Props {
@@ -36,6 +37,8 @@ const CONCURRENCY = 3
 
 export default function UploadDialog({ open, files, userId, onClose, onAllDone }: Props) {
   const [items, setItems] = useState<UploadItem[]>([])
+  const [snackOpen, setSnackOpen] = useState(false)
+  const [snackMsg, setSnackMsg] = useState('')
   const startedRef = useRef(false)
 
   useEffect(() => {
@@ -70,8 +73,7 @@ export default function UploadDialog({ open, files, userId, onClose, onAllDone }
         })
         setItems(prev => prev.map((it, i) => i === idx ? { ...it, status: 'done', progress: 100 } : it))
       } catch (e: any) {
-        const status = e?.status
-        if (status === 409) {
+        if (e?.status === 409) {
           setItems(prev => prev.map((it, i) => i === idx ? { ...it, status: 'duplicate', progress: 0 } : it))
         } else {
           setItems(prev => prev.map((it, i) => i === idx ? { ...it, status: 'error', errorMsg: e?.message } : it))
@@ -91,62 +93,82 @@ export default function UploadDialog({ open, files, userId, onClose, onAllDone }
           await new Promise(r => setTimeout(r, 200))
         }
       }
+      // Refresh library immediately
       onAllDone()
+      // Build summary from latest state
+      setItems(prev => {
+        const done = prev.filter(i => i.status === 'done').length
+        const skipped = prev.filter(i => i.status === 'duplicate').length
+        const errors = prev.filter(i => i.status === 'error').length
+        const parts: string[] = []
+        if (done > 0) parts.push(`完成 ${done} 本`)
+        if (skipped > 0) parts.push(`跳過 ${skipped} 本`)
+        if (errors > 0) parts.push(`失敗 ${errors} 本`)
+        setSnackMsg(parts.join(' · ') || '上傳完成')
+        setSnackOpen(true)
+        return prev
+      })
     }
     pump()
   }
 
-  const done = items.filter(i => i.status === 'done').length
-  const skipped = items.filter(i => i.status === 'duplicate').length
-  const errors = items.filter(i => i.status === 'error').length
-  const allFinished = items.length > 0 && items.every(i => ['done', 'duplicate', 'error'].includes(i.status))
+  const finishedCount = items.filter(i => ['done', 'duplicate', 'error'].includes(i.status)).length
+  const total = items.length
+  const pct = total > 0 ? Math.round((finishedCount / total) * 100) : 0
+  const allFinished = total > 0 && finishedCount === total
+
+  function handleSnackClose() {
+    setSnackOpen(false)
+    onClose()
+  }
 
   return (
-    <Dialog open={open} onClose={allFinished ? onClose : undefined} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>上傳書籍 ({done}/{items.length})</span>
-        {allFinished && (
-          <IconButton size="small" onClick={onClose}><CloseIcon /></IconButton>
-        )}
-      </DialogTitle>
-      <DialogContent sx={{ maxHeight: 420, overflowY: 'auto' }}>
-        {items.map((item, i) => (
-          <Box key={i} sx={{ mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {item.collection ? `${item.collection}/` : ''}{item.resolvedTitle ?? item.file.name}
-              </Typography>
-              {item.status === 'done' && <CheckCircleIcon color="success" fontSize="small" />}
-              {item.status === 'duplicate' && <WarningAmberIcon color="warning" fontSize="small" />}
-              {item.status === 'error' && <ErrorIcon color="error" fontSize="small" />}
-            </Box>
-            {item.status === 'uploading' && (
-              <LinearProgress variant="determinate" value={item.progress} sx={{ mt: 0.5 }} />
-            )}
-            {item.status === 'pending' && (
-              <LinearProgress variant="determinate" value={0} sx={{ mt: 0.5, opacity: 0.3 }} />
-            )}
-            {item.status === 'duplicate' && (
-              <Typography variant="caption" color="warning.main">已存在，跳過</Typography>
-            )}
-            {item.status === 'error' && (
-              <Typography variant="caption" color="error">{item.errorMsg || '上傳失敗'}</Typography>
-            )}
+    <>
+      {/* Floating progress card — non-blocking, visible while uploading */}
+      {open && !allFinished && total > 0 && (
+        <Paper
+          elevation={4}
+          sx={{
+            position: 'fixed',
+            bottom: 90,
+            right: 24,
+            width: 220,
+            p: 1.5,
+            zIndex: 1400,
+            borderRadius: 2,
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+            上傳中 ({finishedCount}/{total})
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={pct}
+            sx={{ borderRadius: 1, height: 6 }}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">{pct}%</Typography>
           </Box>
-        ))}
-        {allFinished && (
-          <Box sx={{ mt: 1, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
-            <Typography variant="body2">
-              完成 {done} 本 · 跳過 {skipped} 本 · 失敗 {errors} 本
-            </Typography>
-          </Box>
-        )}
-      </DialogContent>
-      {allFinished && (
-        <Box sx={{ px: 2, pb: 2, display: 'flex', justifyContent: 'flex-end' }}>
-          <Button onClick={onClose} variant="contained">關閉</Button>
-        </Box>
+        </Paper>
       )}
-    </Dialog>
+
+      {/* Completion toast — auto-dismisses after 5 seconds */}
+      <Snackbar
+        open={snackOpen}
+        autoHideDuration={5000}
+        onClose={handleSnackClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleSnackClose}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackMsg}
+        </Alert>
+      </Snackbar>
+    </>
   )
 }
