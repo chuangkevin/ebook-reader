@@ -496,15 +496,18 @@ export default function BookLibrary() {
             {/* 書庫 — 分類或一般顯示 */}
             {hasCollections ? (
               <>
-                {/* Named collection scroll rows */}
+                {/* Named collection grid sections */}
                 {collectionGroups.filter(g => g.collection !== null).map(g => (
-                  <ScrollRow key={g.collection} title={g.collection!}>
-                    {g.books.map(book => (
-                      <Box key={book.id} sx={{ width: { xs: '42vw', sm: 160 }, minWidth: 130, maxWidth: 200, flexShrink: 0 }}>
-                        <BookCard {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
-                      </Box>
-                    ))}
-                  </ScrollRow>
+                  <Box key={g.collection} sx={{ mb: 5, px: 2 }}>
+                    <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
+                      {g.collection}
+                    </Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
+                      {g.books.map(book => (
+                        <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
+                      ))}
+                    </Box>
+                  </Box>
                 ))}
                 {/* Uncategorized books */}
                 {(() => {
