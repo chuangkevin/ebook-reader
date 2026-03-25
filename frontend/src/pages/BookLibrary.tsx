@@ -211,31 +211,6 @@ function BookCard({ book, progressPercent, bookmarked, showClearProgress, canDel
   )
 }
 
-// Horizontal scroll section (Netflix-style row)
-function ScrollRow({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Box sx={{ mb: 5 }}>
-      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700, px: 2 }}>
-        {title}
-      </Typography>
-      <Box
-        sx={{
-          display: 'flex',
-          gap: 2,
-          overflowX: 'auto',
-          px: 2,
-          pb: 1,
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'rgba(255,255,255,0.2) transparent',
-          '::-webkit-scrollbar': { height: 5 },
-          '::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.2)', borderRadius: 3 },
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
-  )
-}
 
 export default function BookLibrary() {
   const navigate = useNavigate()
@@ -473,24 +448,26 @@ export default function BookLibrary() {
           <>
             {/* 繼續閱讀 */}
             {continueReading.length > 0 && (
-              <ScrollRow title="繼續閱讀">
-                {continueReading.map(({ book, percentage }) => (
-                  <Box key={book.id} sx={{ width: { xs: '42vw', sm: 160 }, minWidth: 130, maxWidth: 200, flexShrink: 0 }}>
-                    <BookCard {...cardProps} book={book} progressPercent={percentage} bookmarked={bookmarkSet.has(book.id)} showClearProgress canDelete={isUploader(book)} />
-                  </Box>
-                ))}
-              </ScrollRow>
+              <Box sx={{ mb: 5, px: 2 }}>
+                <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>繼續閱讀</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
+                  {continueReading.map(({ book, percentage }) => (
+                    <BookCard key={book.id} {...cardProps} book={book} progressPercent={percentage} bookmarked={bookmarkSet.has(book.id)} showClearProgress canDelete={isUploader(book)} />
+                  ))}
+                </Box>
+              </Box>
             )}
 
             {/* 稍後閱讀 */}
             {readLater.length > 0 && (
-              <ScrollRow title="稍後閱讀">
-                {readLater.map((book) => (
-                  <Box key={book.id} sx={{ width: { xs: '42vw', sm: 160 }, minWidth: 130, maxWidth: 200, flexShrink: 0 }}>
-                    <BookCard {...cardProps} book={book} bookmarked canDelete={isUploader(book)} />
-                  </Box>
-                ))}
-              </ScrollRow>
+              <Box sx={{ mb: 5, px: 2 }}>
+                <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>稍後閱讀</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
+                  {readLater.map((book) => (
+                    <BookCard key={book.id} {...cardProps} book={book} bookmarked canDelete={isUploader(book)} />
+                  ))}
+                </Box>
+              </Box>
             )}
 
             {/* 書庫 — 分類或一般顯示 */}
