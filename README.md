@@ -2,6 +2,38 @@
 
 跨裝置同步的電子書閱讀平台。多人共用一台伺服器，各自選擇使用者後即可繼續閱讀，像 Netflix 的使用者切換體驗。
 
+## 技術棧
+
+- **前端**：React 19 + MUI 7 + Vite + TypeScript
+  - EPUB rendering：foliate-js + fflate（解壓縮）
+  - PDF rendering：react-pdf（pdfjs-dist）
+  - 簡繁轉換：opencc-js
+  - E2E：Playwright
+- **後端**：Express + TypeScript + SQLite（better-sqlite3）
+- **部署**：Docker Compose（dev / prod）
+
+## 部署
+
+### 開發
+
+```bash
+# 前端 (port 5173)
+cd frontend && npm run dev
+
+# 後端 (port 3000)
+cd backend && npm run dev
+```
+
+### Production（Docker Compose）
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+## URL
+
+- Repo：<https://github.com/chuangkevin/ebook-reader>
+
 ---
 
 ## 核心需求
