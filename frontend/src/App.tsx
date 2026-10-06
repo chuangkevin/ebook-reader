@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from 'react-router-dom'
 import ReaderGate from './components/ReaderGate'
 import RouteState from './components/RouteState'
 
@@ -7,12 +7,17 @@ const UserSelectionScreen = lazy(() => import('./pages/UserSelectionScreen'))
 const BookLibrary = lazy(() => import('./pages/BookLibrary'))
 const ReaderPage = lazy(() => import('./pages/ReaderPage'))
 
+function RootRedirect() {
+  const location = useLocation()
+  return <Navigate replace to={{ pathname: '/readers', search: location.search, hash: location.hash }} />
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Suspense fallback={<RouteState loading title="正在翻開下一頁" />}>
         <Routes>
-          <Route path="/" element={<UserSelectionScreen />} />
+          <Route path="/" element={<RootRedirect />} />
           <Route path="/readers" element={<UserSelectionScreen />} />
           <Route path="/readers/new" element={<UserSelectionScreen />} />
           <Route

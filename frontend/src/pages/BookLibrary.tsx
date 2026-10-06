@@ -379,7 +379,7 @@ export default function BookLibrary() {
 
   const loadData = useCallback(async () => {
     if (!currentUser) {
-      navigate('/')
+      navigate('/readers')
       return
     }
     setLoading(true)
@@ -651,7 +651,10 @@ export default function BookLibrary() {
             </IconButton>
           </Tooltip>
           <Tooltip title="切換使用者">
-            <IconButton aria-label="切換使用者" onClick={() => navigate('/')}>
+            <IconButton
+              aria-label="切換使用者"
+              onClick={() => navigate(`/readers?returnTo=${encodeURIComponent(returnUrl)}`)}
+            >
               <SwitchAccountIcon />
             </IconButton>
           </Tooltip>

@@ -53,7 +53,7 @@ export default function ReaderGate({ children }: { children: ReactNode }) {
     return (
       <Navigate
         replace
-        to={`/?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
+        to={`/readers?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
       />
     )
   return children

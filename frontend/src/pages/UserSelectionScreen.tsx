@@ -32,7 +32,7 @@ export default function UserSelectionScreen() {
   const [params] = useSearchParams()
   const dialogOpen = routePath(location.pathname) === '/readers/new'
   const setDialogOpen = (open: boolean) =>
-    navigate({ pathname: open ? '/readers/new' : '/', search: location.search })
+    navigate({ pathname: open ? '/readers/new' : '/readers', search: location.search })
   const { users, setUsers, setCurrentUser } = useUserStore()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

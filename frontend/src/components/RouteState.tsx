@@ -35,7 +35,7 @@ export default function RouteState({
           <Button component={Link} to="/library">
             回到書庫
           </Button>
-          <Button component={Link} to="/">
+          <Button component={Link} to="/readers">
             選擇讀者
           </Button>
         </Box>
