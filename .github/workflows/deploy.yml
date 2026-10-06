@@ -3,23 +3,37 @@ name: Deploy to Server via Tailscale
 on:
   workflow_run:
     workflows: ["Build and Push Docker Images"]
-    types:
-      - completed
-    branches:
-      - main
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: readflix-production
+  cancel-in-progress: false
+
 env:
-  DOCKERHUB_USERNAME: kevin950805
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
-
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     steps:
-      - name: Checkout code
+      - name: Checkout the published commit
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+
+      - name: Test deployment recovery
+        run: python3 -m unittest discover -s tests/deployment -v
 
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
@@ -28,106 +42,69 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:github-actions
 
-      - name: Test Tailscale Connection
-        run: |
-          echo "Testing connection to deployment server..."
-          tailscale status
-          ping -c 3 ${{ secrets.DEPLOY_SERVER_IP }}
-
       - name: Setup SSH
+        env:
+          DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$DEPLOY_SERVER_IP" >> ~/.ssh/known_hosts
 
-      - name: Sync docker-compose.yml to server
+      - name: Stage and deploy the published image pair
         env:
           DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_SERVER_IP}" "mkdir -p '${DEPLOY_PATH}'"
-          scp -i ~/.ssh/deploy_key docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_SERVER_IP}:${DEPLOY_PATH}/docker-compose.yml"
-
-      - name: Deploy via SSH
-        env:
-          DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          ssh -i ~/.ssh/deploy_key ${DEPLOY_USER}@${DEPLOY_SERVER_IP} "
-            set -e
-
-            retry_pull() {
-              local max_attempts=3
-              local attempt=1
-              local delay=10
-
-              while [ \$attempt -le \$max_attempts ]; do
-                echo \"Pulling Docker images (attempt \$attempt/\$max_attempts)...\"
-                if docker compose -f docker-compose.yml pull; then
-                  echo \"Pull successful!\"
-                  return 0
-                fi
-
-                if [ \$attempt -lt \$max_attempts ]; then
-                  echo \"Pull failed, retrying in \${delay}s...\"
-                  sleep \$delay
-                  delay=\$((delay * 2))
-                fi
-                attempt=\$((attempt + 1))
-              done
-
-              echo \"Pull failed after \$max_attempts attempts\"
-              return 1
-            }
-
-            echo \"Navigating to deployment directory...\"
-            cd \"${DEPLOY_PATH}\"
-
-            retry_pull
-
-            echo \"Force removing any leftover containers...\"
-            docker rm -f readflix-backend readflix-frontend 2>/dev/null || true
-
-            echo \"Stopping existing containers...\"
-            docker compose -f docker-compose.yml down --remove-orphans --volumes=false
-
-            echo \"Removing stale networks...\"
-            docker network rm readflix_readflix-network 2>/dev/null || true
-
-            echo \"Starting updated containers...\"
-            docker compose -f docker-compose.yml up -d --force-recreate
-
-            echo \"Cleaning up old images...\"
-            docker image prune -af --filter \"until=24h\" || true
-
-            echo \"Deployment completed successfully!\"
-            docker compose -f docker-compose.yml ps
-          "
-
-      - name: Health Check
-        run: |
-          echo "Performing health check..."
-          sleep 10
-          curl -f http://${{ secrets.DEPLOY_SERVER_IP }}:7123/ || exit 1
-          echo "Health check passed!"
+          # Quote remote arguments for the SSH shell; never interpolate secrets as code.
+          remote_stage=$(python3 - <<'PY'
+          import os, shlex
+          from pathlib import PurePosixPath
+          root = PurePosixPath(os.environ['DEPLOY_PATH'])
+          if not root.is_absolute() or str(root) == '/':
+              raise SystemExit('DEPLOY_PATH must be an existing absolute application directory')
+          stage = root / ('.readflix-stage-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'])
+          print(shlex.join(['mkdir', '-m', '700', '--', str(stage)]))
+          PY
+          )
+          target="${DEPLOY_USER}@${DEPLOY_SERVER_IP}"
+          ssh_options=(-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+          # The commands are deliberately assembled locally with shlex.join.
+          # shellcheck disable=SC2029
+          ssh "${ssh_options[@]}" "$target" "$remote_stage"
+          # Transfer only public release files, never server data or credentials.
+          remote_unpack=$(python3 - <<'PY'
+          import os, shlex
+          from pathlib import PurePosixPath
+          stage = PurePosixPath(os.environ['DEPLOY_PATH']) / ('.readflix-stage-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'])
+          print(shlex.join(['tar', '-xf', '-', '-C', str(stage)]))
+          PY
+          )
+          # shellcheck disable=SC2029
+          tar -cf - scripts/deploy.py docker-compose.prod.yml | ssh "${ssh_options[@]}" "$target" "$remote_unpack"
+          remote_deploy=$(python3 - <<'PY'
+          import os, shlex
+          from pathlib import PurePosixPath
+          root = PurePosixPath(os.environ['DEPLOY_PATH'])
+          stage = root / ('.readflix-stage-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'])
+          print(shlex.join(['python3', str(stage / 'scripts/deploy.py'), '--path', str(root),
+                            '--compose', str(stage / 'docker-compose.prod.yml'), '--sha', os.environ['RELEASE_SHA']]))
+          PY
+          )
+          # shellcheck disable=SC2029
+          ssh "${ssh_options[@]}" "$target" "$remote_deploy"
 
       - name: Deployment Summary
         if: always()
+        env:
+          DEPLOY_STATUS: ${{ job.status }}
         run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Server**: \`${{ secrets.DEPLOY_SERVER_IP }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
-          echo "  - Frontend: \`${{ env.DOCKERHUB_USERNAME }}/readflix-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "  - Backend: \`${{ env.DOCKERHUB_USERNAME }}/readflix-backend:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Deployed at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-
-      - name: Notify on Failure
-        if: failure()
-        run: |
-          echo "Deployment failed! Please check the logs above." >> $GITHUB_STEP_SUMMARY
+          {
+            echo '## Deployment Summary'
+            echo "- Status: $DEPLOY_STATUS"
+            echo "- Release commit: $RELEASE_SHA"
+            echo '- Success requires a verified server-local data backup and both service health checks.'
+            echo '- Recovery archives, Compose snapshots and image receipts remain on the server.'
+          } >> "$GITHUB_STEP_SUMMARY"

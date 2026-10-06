@@ -3,6 +3,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from 'react'
 
 import './EpubReader.css'
@@ -45,9 +46,9 @@ interface EpubReaderProps {
 }
 
 const THEME_COLORS: Record<string, { bg: string; fg: string }> = {
-  light: { bg: '#ffffff', fg: '#000000' },
+  light: { bg: '#fffdf7', fg: '#000000' },
   sepia: { bg: '#f5ecd7', fg: '#3d2b1f' },
-  dark: { bg: '#1a1a1a', fg: '#e0e0e0' },
+  dark: { bg: '#181a19', fg: '#e0e0e0' },
 }
 
 function injectStyles(doc: Document, writingMode: string, fontSize: number, theme: string) {
@@ -66,6 +67,8 @@ function injectStyles(doc: Document, writingMode: string, fontSize: number, them
     html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; background-color: ${bg} !important; -webkit-text-size-adjust: none !important; text-size-adjust: none !important; }
     ${bodyElements} { font-size: ${fontSize}px !important; }
     ${allElements} { color: ${fg} !important; }
+    ::selection { background: #98432e; color: #fffdf7; }
+    html { color-scheme: ${theme === "dark" ? "dark" : "light"}; scrollbar-color: ${fg} ${bg}; }
   `
 }
 
@@ -78,6 +81,7 @@ function parseProgress(progress?: string): { chapterIndex: number; scrollFractio
 
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
   ({ bookId, initialProgress, writingMode, fontSize, gap = 0.06, theme = 'light', tapZoneLayout = 'default', openccMode = 'none', onCenterTap, onProgressChange, onTocLoad }, ref) => {
+    const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
     const paginatorRef = useRef<HTMLElement>(null)
     const bookRef = useRef<any>(null)
     const currentProgressRef = useRef<{ index: number; anchor: number } | null>(null)
@@ -221,6 +225,10 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       if (!paginator) return
 
       let destroyed = false
+      let restoring = true
+      let settledProgress = ''
+      let removeListeners = () => {}
+      setLoadState('loading')
 
       async function init() {
         try {
@@ -258,6 +266,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           }
 
           function handleRelocate(e: CustomEvent) {
+            if (destroyed) return
             const { fraction, index, range } = e.detail ?? {}
             // Save the first visible text as a layout-independent position marker
             if (range?.toString) {
@@ -279,21 +288,25 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
 
             if (typeof index === 'number' && typeof fraction === 'number') {
               currentProgressRef.current = { index, anchor: fraction }
+              const sp = sectionProgressRef.current
+              const size = e.detail?.size ?? 0
+              const weightedFraction = sp
+                ? sp.getProgress(index, fraction, size).fraction
+                : (index + fraction) / (totalSectionsRef.current || 1)
+              settledProgress = `@@${index}@@${fraction}@@${totalSectionsRef.current}@@${weightedFraction}`
               // Suppress progress saves during mode switching to avoid overwriting with reset position
-              if (!modeSwitchingRef.current) {
-                // Use SectionProgress for weighted book-wide fraction
-                const sp = sectionProgressRef.current
-                const size = e.detail?.size ?? 0
-                const weightedFraction = sp
-                  ? sp.getProgress(index, fraction, size).fraction
-                  : (index + fraction) / (totalSectionsRef.current || 1)
-                onProgressChangeRef.current(`@@${index}@@${fraction}@@${totalSectionsRef.current}@@${weightedFraction}`)
+              if (!modeSwitchingRef.current && !restoring) {
+                onProgressChangeRef.current(settledProgress)
               }
             }
           }
 
           paginator.addEventListener('load', handleLoad)
           paginator.addEventListener('relocate', handleRelocate)
+          removeListeners = () => {
+            paginator.removeEventListener('load', handleLoad)
+            paginator.removeEventListener('relocate', handleRelocate)
+          }
 
           paginator.setAttribute('flow', 'paginated')
           paginator.setAttribute('gap', `${Math.round(gapRef.current * 100)}%`)
@@ -305,11 +318,16 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           // Restore progress
           const parsed = parseProgress(initialProgress)
           if (parsed && (parsed.chapterIndex > 0 || parsed.scrollFraction > 0)) {
-            try {
-              await paginator.goTo({ index: parsed.chapterIndex, anchor: parsed.scrollFraction })
-            } catch { /* ignore if goTo fails */ }
+            await paginator.goTo({ index: parsed.chapterIndex, anchor: parsed.scrollFraction })
+          }
+          if (!destroyed) {
+            restoring = false
+            // Publish only the restored page, including the first page of a new book.
+            if (settledProgress) onProgressChangeRef.current(settledProgress)
+            setLoadState('ready')
           }
         } catch (err) {
+          if (!destroyed) setLoadState('error')
           console.error('[EpubReader] init error:', err)
         }
       }
@@ -320,8 +338,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         destroyed = true
         bookRef.current = null
         try {
-          paginator.removeEventListener('load', () => {})
-          paginator.removeEventListener('relocate', () => {})
+          removeListeners()
         } catch { /* ignore */ }
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -365,6 +382,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
 
     return (
       <div className="epub-reader-root">
+        {loadState !== 'ready' && <div role={loadState === 'error' ? 'alert' : 'status'} style={{ position: 'absolute', inset: 0, display: 'grid', placeContent: 'center', zIndex: 15, background: THEME_COLORS[theme].bg, color: THEME_COLORS[theme].fg }}>{loadState === 'error' ? '無法載入 EPUB，請重新整理後重試。' : '正在翻開書頁…'}</div>}
         {tapZoneLayout === 'default' ? (
           <>
             <div className="epub-tap-zone epub-tap-left" onClick={onPrev} />

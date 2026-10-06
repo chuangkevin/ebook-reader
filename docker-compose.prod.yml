@@ -4,7 +4,7 @@ networks:
 
 services:
   frontend:
-    image: kevin950805/readflix-frontend:latest
+    image: kevin950805/readflix-frontend:${READFLIX_IMAGE_TAG:-latest}
     container_name: readflix-frontend
     ports:
       - "7123:80"
@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
 
   backend:
-    image: kevin950805/readflix-backend:latest
+    image: kevin950805/readflix-backend:${READFLIX_IMAGE_TAG:-latest}
     container_name: readflix-backend
     ports:
       - "3003:3003"

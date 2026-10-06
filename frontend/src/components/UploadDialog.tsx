@@ -39,78 +39,66 @@ export default function UploadDialog({ open, files, userId, onClose, onAllDone }
   const [items, setItems] = useState<UploadItem[]>([])
   const [snackOpen, setSnackOpen] = useState(false)
   const [snackMsg, setSnackMsg] = useState('')
-  const startedRef = useRef(false)
+  const startedFilesRef = useRef<UploadFile[] | null>(null)
+  const onAllDoneRef = useRef(onAllDone)
+  const mountedRef = useRef(false)
+
+  useEffect(() => { onAllDoneRef.current = onAllDone }, [onAllDone])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => {
-    if (!open) { startedRef.current = false; return }
-    setItems(files.map(f => ({
-      ...f,
-      status: f.preMarkedDuplicate ? 'duplicate' : 'pending',
+    // A batch belongs to the selected files. Route visibility never restarts it.
+    if (files.length === 0 || startedFilesRef.current === files) return
+    startedFilesRef.current = files
+    const batch: UploadItem[] = files.map(file => ({
+      ...file,
+      status: file.preMarkedDuplicate ? 'duplicate' : 'pending',
       progress: 0,
-    })))
-    startedRef.current = false
-  }, [open, files])
+    }))
+    const isCurrent = () => mountedRef.current && startedFilesRef.current === files
+    const publish = () => { if (isCurrent()) setItems(batch.map(item => ({ ...item }))) }
+    publish()
+    const queue = batch.filter(item => item.status === 'pending')
 
-  useEffect(() => {
-    if (!open || items.length === 0 || startedRef.current) return
-    startedRef.current = true
-    runUploads()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, items.length])
-
-  async function runUploads() {
-    const queue = items.map((_, i) => i).filter(i => items[i].status !== 'duplicate')
-    const active = new Set<number>()
-
-    const uploadOne = async (idx: number) => {
-      setItems(prev => prev.map((it, i) => i === idx ? { ...it, status: 'uploading' } : it))
-      try {
-        await api.books.upload(items[idx].file, userId, {
-          collection: items[idx].collection,
-          onProgress: (pct) => {
-            setItems(prev => prev.map((it, i) => i === idx ? { ...it, progress: pct } : it))
-          },
-        })
-        setItems(prev => prev.map((it, i) => i === idx ? { ...it, status: 'done', progress: 100 } : it))
-      } catch (e: any) {
-        if (e?.status === 409) {
-          setItems(prev => prev.map((it, i) => i === idx ? { ...it, status: 'duplicate', progress: 0 } : it))
-        } else {
-          setItems(prev => prev.map((it, i) => i === idx ? { ...it, status: 'error', errorMsg: e?.message } : it))
+    async function worker() {
+      let item: UploadItem | undefined
+      while ((item = queue.shift())) {
+        const current = item
+        current.status = 'uploading'
+        publish()
+        try {
+          await api.books.upload(current.file, userId, {
+            collection: current.collection,
+            onProgress: pct => { current.progress = pct; publish() },
+          })
+          current.status = 'done'
+          current.progress = 100
+        } catch (error: unknown) {
+          const failure = error as { status?: number; message?: string }
+          current.status = failure?.status === 409 ? 'duplicate' : 'error'
+          current.errorMsg = failure?.message
         }
+        publish()
       }
-      active.delete(idx)
     }
 
-    const pump = async () => {
-      while (queue.length > 0 || active.size > 0) {
-        while (active.size < CONCURRENCY && queue.length > 0) {
-          const idx = queue.shift()!
-          active.add(idx)
-          uploadOne(idx).then(pump)
-        }
-        if (active.size >= CONCURRENCY || (queue.length === 0 && active.size > 0)) {
-          await new Promise(r => setTimeout(r, 200))
-        }
-      }
-      // Refresh library immediately
-      onAllDone()
-      // Build summary from latest state
-      setItems(prev => {
-        const done = prev.filter(i => i.status === 'done').length
-        const skipped = prev.filter(i => i.status === 'duplicate').length
-        const errors = prev.filter(i => i.status === 'error').length
-        const parts: string[] = []
-        if (done > 0) parts.push(`完成 ${done} 本`)
-        if (skipped > 0) parts.push(`跳過 ${skipped} 本`)
-        if (errors > 0) parts.push(`失敗 ${errors} 本`)
-        setSnackMsg(parts.join(' · ') || '上傳完成')
-        setSnackOpen(true)
-        return prev
-      })
-    }
-    pump()
-  }
+    void Promise.all(Array.from({ length: CONCURRENCY }, worker)).then(() => {
+      if (!isCurrent()) return
+      onAllDoneRef.current()
+      const done = batch.filter(item => item.status === 'done').length
+      const skipped = batch.filter(item => item.status === 'duplicate').length
+      const errors = batch.filter(item => item.status === 'error').length
+      const parts: string[] = []
+      if (done > 0) parts.push(`完成 ${done} 本`)
+      if (skipped > 0) parts.push(`跳過 ${skipped} 本`)
+      if (errors > 0) parts.push(`失敗 ${errors} 本`)
+      setSnackMsg(parts.join(' · ') || '上傳完成')
+      setSnackOpen(true)
+    })
+  }, [files, userId])
 
   const finishedCount = items.filter(i => ['done', 'duplicate', 'error'].includes(i.status)).length
   const total = items.length

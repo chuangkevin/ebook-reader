@@ -17,6 +17,7 @@ export interface TxtReaderHandle {
 
 interface TxtReaderProps {
   bookId: string
+  theme?: 'light' | 'dark' | 'sepia'
   userId: string
   initialProgress?: string
   writingMode: 'vertical-rl' | 'horizontal-tb'
@@ -35,10 +36,11 @@ function parseScrollFraction(progress?: string): number {
 }
 
 const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
-  ({ bookId, initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
+  ({ bookId, theme = 'light', initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const [text, setText] = useState<string>('')
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(false)
 
     const onProgressChangeRef = useRef(onProgressChange)
     useEffect(() => { onProgressChangeRef.current = onProgressChange }, [onProgressChange])
@@ -50,6 +52,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
     // Fetch text content
     useEffect(() => {
       setLoading(true)
+      setError(false)
       progressRestoredRef.current = false
       fetch(`/api/books/${bookId}/file`)
         .then((res) => {
@@ -63,6 +66,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
         })
         .catch((err) => {
           console.error('[TxtReader] fetch error:', err)
+          setError(true)
           setLoading(false)
         })
     }, [bookId])
@@ -154,7 +158,9 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
       },
       goToFraction: async (fraction: number) => {
         const el = containerRef.current
-        if (el) el.scrollTop = fraction * (el.scrollHeight - el.clientHeight)
+        if (!el) return
+        if (writingMode === 'vertical-rl') el.scrollLeft = -fraction * (el.scrollWidth - el.clientWidth)
+        else el.scrollTop = fraction * (el.scrollHeight - el.clientHeight)
       },
     }))
 
@@ -162,7 +168,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
     const onPrev = () => scrollBackward()
 
     return (
-      <div className="epub-reader-root">
+      <div className="epub-reader-root" style={{ background: theme === 'dark' ? '#181a19' : theme === 'sepia' ? '#f5ecd7' : '#fffdf7', color: theme === 'dark' ? '#f0eee7' : '#252c28' }}>
         {/* Tap zones */}
         {tapZoneLayout === 'default' ? (
           <>
@@ -202,7 +208,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
             WebkitUserSelect: 'none',
           }}
         >
-          {loading ? null : text}
+          {loading ? '正在載入文字…' : error ? '無法載入書籍內容，請重新整理後重試。' : text}
         </div>
       </div>
     )

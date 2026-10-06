@@ -18,6 +18,7 @@ export interface PdfReaderHandle {
 
 interface PdfReaderProps {
   bookId: string
+  theme?: 'light' | 'dark' | 'sepia'
   userId: string
   initialProgress?: string
   writingMode: 'vertical-rl' | 'horizontal-tb'
@@ -36,7 +37,7 @@ function parsePageFromProgress(progress?: string): number {
 }
 
 const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
-  ({ bookId, initialProgress, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
+  ({ bookId, theme = 'light', initialProgress, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const [numPages, setNumPages] = useState<number>(0)
     const [currentPage, setCurrentPage] = useState<number>(() => parsePageFromProgress(initialProgress))
@@ -113,7 +114,7 @@ const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
     const onNext = () => next()
 
     return (
-      <div ref={containerRef} className="epub-reader-root" style={{ background: '#525659' }}>
+      <div ref={containerRef} className="epub-reader-root" style={{ background: theme === 'dark' ? '#181a19' : '#e0e1d9' }}>
         {/* Tap zones */}
         {tapZoneLayout === 'default' ? (
           <>
@@ -149,8 +150,8 @@ const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
           <Document
             file={fileUrl}
             onLoadSuccess={handleDocumentLoadSuccess}
-            loading={null}
-            error={null}
+            loading={<p role="status">正在載入 PDF…</p>}
+            error={<p role="alert">無法載入 PDF，請重新整理後重試。</p>}
           >
             <Page
               pageNumber={currentPage}

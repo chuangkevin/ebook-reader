@@ -1,9 +1,12 @@
+import { APP_VERSION } from '../version'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { extractBookTitle } from '../utils/epubMeta'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   AppBar,
   Avatar,
+  Alert,
+  Chip,
   Box,
   Button,
   Card,
@@ -19,9 +22,6 @@ import {
   IconButton,
   LinearProgress,
   Skeleton,
-  SpeedDial,
-  SpeedDialAction,
-  SpeedDialIcon,
   TextField,
   Tooltip,
   Toolbar,
@@ -38,6 +38,9 @@ import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { useUserStore } from '../stores/userStore'
 import { useBookStore } from '../stores/bookStore'
 import { api } from '../services/api.service'
+import ThemeSwitch from '../components/ThemeSwitch'
+import { clearRecovery, waitForProgress } from '../utils/readingProgress'
+import { libraryReturn, routePath } from '../utils/navigation'
 import type { Book } from '../types/index'
 import UploadDialog from '../components/UploadDialog'
 import type { UploadFile } from '../components/UploadDialog'
@@ -63,8 +66,14 @@ function parseProgressPercent(progress?: string): number {
 }
 
 const PLACEHOLDER_COLORS = [
-  '#5c6bc0', '#42a5f5', '#26a69a', '#66bb6a',
-  '#ffa726', '#ef5350', '#ab47bc', '#8d6e63',
+  '#38534e',
+  '#4a555f',
+  '#695240',
+  '#48563c',
+  '#76503b',
+  '#75443e',
+  '#584d62',
+  '#5f574b',
 ]
 
 function placeholderColor(title: string): string {
@@ -81,7 +90,7 @@ function groupBooksByCollection(books: Book[]): { collection: string | null; boo
     map.get(key)!.push(book)
   }
   const result: { collection: string | null; books: Book[] }[] = []
-  const namedCollections = ([...map.keys()].filter(k => k !== null) as string[]).sort()
+  const namedCollections = ([...map.keys()].filter((k) => k !== null) as string[]).sort()
   for (const col of namedCollections) {
     result.push({ collection: col, books: map.get(col)! })
   }
@@ -92,78 +101,160 @@ function groupBooksByCollection(books: Book[]): { collection: string | null; boo
 }
 
 interface BookCardProps {
+  compact?: boolean
   book: Book
   progressPercent?: number
   bookmarked?: boolean
   showClearProgress?: boolean
   canDelete?: boolean
   onDelete: (book: Book) => void
-  onClick: (book: Book) => void
   onBookmark: (bookId: string) => void
   onClearProgress?: (bookId: string) => void
 }
 
-function BookCard({ book, progressPercent, bookmarked, showClearProgress, canDelete, onDelete, onClick, onBookmark, onClearProgress }: BookCardProps) {
+function BookCard({
+  compact = false,
+  book,
+  progressPercent,
+  bookmarked,
+  showClearProgress,
+  canDelete,
+  onDelete,
+  onBookmark,
+  onClearProgress,
+}: BookCardProps) {
+  const location = useLocation()
+  const from = libraryReturn(location.pathname + location.search)
+  const [coverFailed, setCoverFailed] = useState(false)
   const pct = progressPercent ?? parseProgressPercent(book.progress)
 
   return (
     <Card
       sx={{
-        bgcolor: '#2a2a2a',
-        color: 'white',
+        bgcolor: 'background.paper',
+        color: 'text.primary',
         position: 'relative',
         height: '100%',
+        minHeight: compact ? 184 : undefined,
         display: 'flex',
         flexDirection: 'column',
-        transition: 'transform 0.15s',
-        '&:hover': { transform: 'scale(1.03)' },
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        transition: 'transform 180ms ease',
+        '&:hover': { transform: 'translateY(-4px)' },
       }}
     >
       <CardActionArea
-        onClick={() => onClick(book)}
-        sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
+        aria-label={`閱讀 ${book.title}`}
+        component={Link}
+        to={`/reader/${encodeURIComponent(book.id)}?from=${encodeURIComponent(from)}`}
+        sx={{
+          flexGrow: 1,
+          display: compact ? 'grid' : 'flex',
+          gridTemplateColumns: compact
+            ? { xs: '100px minmax(0, 1fr)', sm: '120px minmax(0, 1fr)' }
+            : undefined,
+          flexDirection: 'column',
+          alignItems: 'stretch',
+        }}
       >
-        {book.coverUrl ? (
+        {book.coverUrl && !coverFailed ? (
           <CardMedia
             component="img"
             image={book.coverUrl}
             alt={book.title}
-            sx={{ height: 200, objectFit: 'cover' }}
+            onError={() => setCoverFailed(true)}
+            sx={{
+              height: compact ? '100%' : { xs: 210, sm: 260 },
+              minHeight: compact ? 184 : undefined,
+              objectFit: 'contain',
+              bgcolor: 'action.hover',
+              p: compact ? 1 : 2,
+            }}
           />
         ) : (
           <Box
             sx={{
-              height: 200,
-              bgcolor: placeholderColor(book.title),
+              height: compact ? '100%' : { xs: 210, sm: 260 },
+              minHeight: compact ? 184 : undefined,
+              background: `linear-gradient(100deg, #0003 0 4%, transparent 4% 6%, #fff1 6% 7%, transparent 7%), ${placeholderColor(book.title)}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Typography variant="h2" sx={{ color: 'white', fontWeight: 700, userSelect: 'none' }}>
-              {book.title.charAt(0)}
+            <Typography
+              variant="h2"
+              sx={{
+                color: '#fffaf0',
+                fontFamily: '"Songti TC", serif',
+                fontWeight: 600,
+                fontSize: compact ? 22 : { xs: 26, sm: 32 },
+                writingMode: /[\u3400-\u9fff]/.test(book.title) ? 'vertical-rl' : 'horizontal-tb',
+                overflowWrap: 'anywhere',
+                textAlign: 'center',
+                maxHeight: compact ? 144 : 180,
+                px: compact ? 1 : 3,
+                overflow: 'hidden',
+                userSelect: 'none',
+              }}
+            >
+              {book.title}
             </Typography>
           </Box>
         )}
-        <CardContent sx={{ flexGrow: 1, pb: '8px !important', px: 1.5, pt: 1 }}>
+        <CardContent
+          sx={{
+            flexGrow: 1,
+            minWidth: 0,
+            pb: compact ? '56px !important' : '8px !important',
+            px: compact ? 2 : 1.5,
+            pt: compact ? 2 : 1,
+          }}
+        >
           <Typography
-            variant="body2"
+            variant={compact ? 'body1' : 'body2'}
             fontWeight={600}
-            sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', mb: 0.5 }}
+            sx={{
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              mb: 0.5,
+            }}
           >
             {book.title}
           </Typography>
-          <Typography variant="caption" sx={{ color: 'grey.500', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {book.author}
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {book.author === 'Unknown' ? '作者未提供' : book.author}
           </Typography>
           {pct > 0 && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75 }}>
               <LinearProgress
                 variant="determinate"
                 value={pct}
-                sx={{ flex: 1, borderRadius: 1, height: 5, bgcolor: 'grey.800', '& .MuiLinearProgress-bar': { bgcolor: '#90caf9' } }}
+                sx={{
+                  flex: 1,
+                  borderRadius: 1,
+                  height: 5,
+                  bgcolor: 'divider',
+                  '& .MuiLinearProgress-bar': { bgcolor: 'primary.main' },
+                }}
               />
-              <Typography variant="caption" sx={{ color: 'grey.400', minWidth: 28, textAlign: 'right', fontSize: 10 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: 'text.secondary', minWidth: 28, textAlign: 'right', fontSize: 12 }}
+              >
                 {pct}%
               </Typography>
             </Box>
@@ -171,38 +262,83 @@ function BookCard({ book, progressPercent, bookmarked, showClearProgress, canDel
         </CardContent>
       </CardActionArea>
 
-      {/* Action buttons */}
-      <Box sx={{ position: 'absolute', top: 4, right: 4, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      {/* Actions remain outside the reading link and never cover the book artwork. */}
+      <Box
+        sx={{
+          position: compact ? 'absolute' : 'static',
+          bottom: compact ? 0 : undefined,
+          right: compact ? 4 : undefined,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: 0.25,
+          px: 0.5,
+          pb: 0.5,
+          borderTop: compact ? 'none' : '1px solid',
+          borderColor: 'divider',
+        }}
+      >
         {showClearProgress && onClearProgress && (
           <Tooltip title="不看了" placement="left">
             <IconButton
               size="small"
-              onClick={(e) => { e.stopPropagation(); onClearProgress(book.id) }}
-              sx={{ bgcolor: 'rgba(0,0,0,0.55)', color: 'grey.300', width: 28, height: 28, '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: 'white' } }}
+              aria-label={`清除 ${book.title} 的閱讀進度`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onClearProgress(book.id)
+              }}
+              sx={{
+                bgcolor: 'transparent',
+                color: 'text.secondary',
+                width: 44,
+                height: 44,
+                '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: '#fff' },
+              }}
             >
-              <CloseIcon sx={{ fontSize: 14 }} />
+              <CloseIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
         )}
         <Tooltip title={bookmarked ? '取消稍後閱讀' : '稍後閱讀'} placement="left">
           <IconButton
             size="small"
-            onClick={(e) => { e.stopPropagation(); onBookmark(book.id) }}
-            sx={{ bgcolor: 'rgba(0,0,0,0.55)', color: bookmarked ? '#ffc107' : 'grey.300', width: 28, height: 28, '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' } }}
+            aria-label={`${bookmarked ? '取消稍後閱讀' : '稍後閱讀'} ${book.title}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onBookmark(book.id)
+            }}
+            sx={{
+              bgcolor: 'transparent',
+              color: bookmarked ? 'primary.main' : 'text.secondary',
+              width: 44,
+              height: 44,
+              '&:hover': { bgcolor: 'action.hover' },
+            }}
           >
-            {bookmarked
-              ? <BookmarkIcon sx={{ fontSize: 14 }} />
-              : <BookmarkBorderIcon sx={{ fontSize: 14 }} />}
+            {bookmarked ? (
+              <BookmarkIcon sx={{ fontSize: 18 }} />
+            ) : (
+              <BookmarkBorderIcon sx={{ fontSize: 18 }} />
+            )}
           </IconButton>
         </Tooltip>
         {canDelete && (
           <Tooltip title="刪除" placement="left">
             <IconButton
               size="small"
-              onClick={(e) => { e.stopPropagation(); onDelete(book) }}
-              sx={{ bgcolor: 'rgba(0,0,0,0.55)', color: 'grey.300', width: 28, height: 28, '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: 'white' } }}
+              aria-label={`刪除 ${book.title}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(book)
+              }}
+              sx={{
+                bgcolor: 'transparent',
+                color: 'text.secondary',
+                width: 44,
+                height: 44,
+                '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: '#fff' },
+              }}
             >
-              <DeleteIcon sx={{ fontSize: 14 }} />
+              <DeleteIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
         )}
@@ -211,34 +347,56 @@ function BookCard({ book, progressPercent, bookmarked, showClearProgress, canDel
   )
 }
 
-
 export default function BookLibrary() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [params, setParams] = useSearchParams()
+  const pathname = routePath(location.pathname)
+  const returnUrl =
+    pathname === '/library'
+      ? location.pathname + location.search
+      : libraryReturn(params.get('returnTo'))
+  const profileOpen = pathname === '/settings'
+  const uploadOpen = pathname === '/upload'
+  const closePanel = () => navigate(returnUrl)
+  const view = params.get('view')
+  const collection = params.get('collection')
+  const [loadError, setLoadError] = useState(false)
+  const [actionError, setActionError] = useState('')
   const currentUser = useUserStore((s) => s.currentUser)
   const setCurrentUser = useUserStore((s) => s.setCurrentUser)
-  const { books, setBooks, setCurrentBook } = useBookStore()
+  const { books, setBooks } = useBookStore()
   const [loading, setLoading] = useState(true)
   const [bookmarkSet, setBookmarkSet] = useState<Set<string>>(new Set())
-  const [progressMap, setProgressMap] = useState<Map<string, { cfi: string; percentage: number; lastReadAt: number }>>(new Map())
+  const [progressMap, setProgressMap] = useState<
+    Map<string, { cfi: string; percentage: number; lastReadAt: number }>
+  >(new Map())
   const [confirmBook, setConfirmBook] = useState<Book | null>(null)
-  const [profileOpen, setProfileOpen] = useState(false)
   const [profileName, setProfileName] = useState('')
   const [profileColor, setProfileColor] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
-  const [uploadOpen, setUploadOpen] = useState(false)
 
   const loadData = useCallback(async () => {
-    if (!currentUser) { navigate('/'); return }
+    if (!currentUser) {
+      navigate('/')
+      return
+    }
     setLoading(true)
+    setLoadError(false)
     try {
       const [booksData, bookmarksData, progressData] = await Promise.all([
         api.books.list(currentUser.id),
         api.bookmarks.list(currentUser.id),
         api.books.getUserProgress(currentUser.id),
       ])
-      const progMap = new Map(progressData.map(p => [p.bookId, { cfi: p.cfi, percentage: p.percentage, lastReadAt: p.lastReadAt }]))
-      const booksWithProgress = booksData.map(b => {
+      const progMap = new Map(
+        progressData.map((p) => [
+          p.bookId,
+          { cfi: p.cfi, percentage: p.percentage, lastReadAt: p.lastReadAt },
+        ])
+      )
+      const booksWithProgress = booksData.map((b) => {
         const prog = progMap.get(b.id)
         return prog ? { ...b, progress: prog.cfi } : b
       })
@@ -246,17 +404,19 @@ export default function BookLibrary() {
       setBookmarkSet(new Set(bookmarksData))
       setProgressMap(progMap)
     } catch {
-      // ignore
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
   }, [currentUser, navigate, setBooks])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   // Split books into sections
   const { continueReading, readLater, otherBooks } = useMemo(() => {
-    const reading: Array<{ book: Book; percentage: number; lastReadAt: number; }> = []
+    const reading: Array<{ book: Book; percentage: number; lastReadAt: number }> = []
     const later: Book[] = []
     const other: Book[] = []
 
@@ -276,7 +436,7 @@ export default function BookLibrary() {
   }, [books, progressMap, bookmarkSet])
 
   const collectionGroups = useMemo(() => groupBooksByCollection(otherBooks), [otherBooks])
-  const hasCollections = collectionGroups.some(g => g.collection !== null)
+  const hasCollections = collectionGroups.some((g) => g.collection !== null)
 
   function openFilePicker(folder: boolean) {
     // setTimeout(0) lets the SpeedDial backdrop close before the file picker opens
@@ -302,8 +462,8 @@ export default function BookLibrary() {
         let baseList: UploadFile[]
         if (folder) {
           baseList = Array.from(files)
-            .filter(f => /\.(epub|pdf|txt)$/i.test(f.name))
-            .map(f => {
+            .filter((f) => /\.(epub|pdf|txt)$/i.test(f.name))
+            .map((f) => {
               const parts = f.webkitRelativePath.split('/')
               // parts[0] = selected root folder (skip)
               // parts.length === 2 → root-level file → no collection
@@ -312,20 +472,19 @@ export default function BookLibrary() {
               return { file: f, collection }
             })
         } else {
-          baseList = Array.from(files).map(f => ({ file: f, collection: null }))
+          baseList = Array.from(files).map((f) => ({ file: f, collection: null }))
         }
         if (baseList.length === 0) return
 
         // Extract metadata and pre-check duplicates before opening dialog
         const norm = (s: string) => s.trim().toLowerCase()
-        const existingTitleSet = new Set(books.map(b => norm(b.title)))
-        const results = await Promise.allSettled(
-          baseList.map(uf => extractBookTitle(uf.file))
-        )
+        const existingTitleSet = new Set(books.map((b) => norm(b.title)))
+        const results = await Promise.allSettled(baseList.map((uf) => extractBookTitle(uf.file)))
         const uploadList: UploadFile[] = baseList.map((uf, i) => {
-          const resolvedTitle = results[i].status === 'fulfilled'
-            ? (results[i] as PromiseFulfilledResult<string | null>).value ?? undefined
-            : undefined
+          const resolvedTitle =
+            results[i].status === 'fulfilled'
+              ? ((results[i] as PromiseFulfilledResult<string | null>).value ?? undefined)
+              : undefined
           const filenameStem = uf.file.name.replace(/\.(epub|pdf|txt)$/i, '')
           // Match by: 1) extracted EPUB title  2) filename stem (covers TXT/PDF or when EPUB parse fails)
           const preMarkedDuplicate =
@@ -335,7 +494,7 @@ export default function BookLibrary() {
         })
 
         setUploadFiles(uploadList)
-        setUploadOpen(true)
+        navigate(`/upload?returnTo=${encodeURIComponent(returnUrl)}`)
       })
 
       input.click()
@@ -343,7 +502,6 @@ export default function BookLibrary() {
   }
 
   function handleUploadDone() {
-    setUploadOpen(false)
     loadData()
   }
 
@@ -358,9 +516,13 @@ export default function BookLibrary() {
     try {
       await api.books.remove(book.id, currentUser.id)
       setBooks(books.filter((b) => b.id !== book.id))
-      setProgressMap(prev => { const m = new Map(prev); m.delete(book.id); return m })
+      setProgressMap((prev) => {
+        const m = new Map(prev)
+        m.delete(book.id)
+        return m
+      })
     } catch {
-      // ignore
+      setActionError('操作未完成，請檢查連線後重試。')
     }
   }
 
@@ -368,42 +530,80 @@ export default function BookLibrary() {
     if (!currentUser) return
     try {
       await api.bookmarks.toggle(currentUser.id, bookId)
-      setBookmarkSet(prev => {
+      setBookmarkSet((prev) => {
         const s = new Set(prev)
-        s.has(bookId) ? s.delete(bookId) : s.add(bookId)
+        if (s.has(bookId)) s.delete(bookId)
+        else s.add(bookId)
         return s
       })
     } catch {
-      // ignore
+      setActionError('操作未完成，請檢查連線後重試。')
     }
   }
 
   async function handleClearProgress(bookId: string) {
     if (!currentUser) return
     try {
+      await waitForProgress(currentUser.id, bookId)
       await api.books.clearProgress(currentUser.id, bookId)
-      setProgressMap(prev => { const m = new Map(prev); m.delete(bookId); return m })
+      clearRecovery(currentUser.id, bookId)
+      setProgressMap((prev) => {
+        const m = new Map(prev)
+        m.delete(bookId)
+        return m
+      })
     } catch {
-      // ignore
+      setActionError('操作未完成，請檢查連線後重試。')
     }
   }
 
-  function handleCardClick(book: Book) {
-    setCurrentBook(book)
-    navigate(`/reader/${book.id}`)
+  const cardProps = {
+    onDelete: handleDelete,
+    onBookmark: handleBookmark,
+    onClearProgress: handleClearProgress,
   }
-
-  const cardProps = { onDelete: handleDelete, onClick: handleCardClick, onBookmark: handleBookmark, onClearProgress: handleClearProgress }
   const isUploader = (book: Book) => !!currentUser && book.uploadedBy === currentUser.id
 
-  const PROFILE_COLORS = ['#5c6bc0', '#42a5f5', '#26a69a', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', '#8d6e63']
+  const PROFILE_COLORS = [
+    '#5c6bc0',
+    '#42a5f5',
+    '#26a69a',
+    '#66bb6a',
+    '#ffa726',
+    '#ef5350',
+    '#ab47bc',
+    '#8d6e63',
+  ]
 
   function openProfile() {
     if (!currentUser) return
     setProfileName(currentUser.name)
     setProfileColor(currentUser.avatarColor ?? PROFILE_COLORS[0])
-    setProfileOpen(true)
+    navigate(`/settings?returnTo=${encodeURIComponent(returnUrl)}`)
   }
+
+  useEffect(() => {
+    if (profileOpen && currentUser) {
+      setProfileName(currentUser.name)
+      setProfileColor(currentUser.avatarColor ?? '#5c6bc0')
+    }
+  }, [profileOpen, currentUser])
+
+  const filteredBooks = books.filter((book) => {
+    if (
+      collection &&
+      (collection === '__none__' ? book.collection != null : book.collection !== collection)
+    )
+      return false
+    if (view === 'reading' && !progressMap.get(book.id)?.percentage) return false
+    if (view === 'saved' && !bookmarkSet.has(book.id)) return false
+    return true
+  })
+  const isFiltered = !!collection || view === 'reading' || view === 'saved'
+  const filterTitle =
+    collection === '__none__'
+      ? '其他書籍'
+      : collection || (view === 'reading' ? '繼續閱讀' : '稍後閱讀')
 
   async function saveProfile() {
     if (!currentUser || !profileName.trim()) return
@@ -411,145 +611,483 @@ export default function BookLibrary() {
     try {
       const updated = await api.users.update(currentUser.id, profileName.trim(), profileColor)
       setCurrentUser({ ...currentUser, name: updated.name, avatarColor: profileColor })
-    } catch { /* ignore */ }
+      closePanel()
+    } catch {
+      setActionError('設定儲存失敗，請重試。')
+    }
     setProfileSaving(false)
-    setProfileOpen(false)
   }
 
   return (
-    <Box sx={{ minHeight: '100dvh', bgcolor: '#1a1a1a', color: 'white', display: 'flex', flexDirection: 'column' }}>
-      <AppBar position="static" sx={{ bgcolor: '#111', boxShadow: 'none', borderBottom: '1px solid #222' }}>
-        <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
-            書庫
+    <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default', color: 'text.primary' }}>
+      <a className="skip-link" href="#library-content">
+        跳至書庫內容
+      </a>
+      <AppBar
+        position="static"
+        sx={{ bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider' }}
+      >
+        <Toolbar
+          sx={{ width: '100%', maxWidth: 1440, mx: 'auto', gap: 1, px: { xs: 2, sm: 4, md: 6 } }}
+        >
+          <Typography
+            component={Link}
+            to="/library"
+            sx={{
+              flexGrow: 1,
+              fontFamily: 'Baskerville, serif',
+              fontSize: 28,
+              fontWeight: 700,
+              textDecoration: 'none',
+              letterSpacing: '-1px',
+            }}
+          >
+            readflix<span style={{ color: 'var(--accent)' }}>.</span>
           </Typography>
-          <Typography variant="body2" sx={{ color: 'grey.400', mr: 0.5 }}>
-            {currentUser?.name}
-          </Typography>
+          <ThemeSwitch />
+          <Tooltip title="個人設定">
+            <IconButton aria-label="個人設定" onClick={openProfile}>
+              <PersonIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="切換使用者">
-            <IconButton color="inherit" size="small" onClick={() => navigate('/')}>
-              <SwitchAccountIcon fontSize="small" />
+            <IconButton aria-label="切換使用者" onClick={() => navigate('/')}>
+              <SwitchAccountIcon />
             </IconButton>
           </Tooltip>
         </Toolbar>
       </AppBar>
-
-      <Box sx={{ flexGrow: 1, pt: 3, pb: 10 }}>
-        {loading ? (
-          <Box sx={{ px: 2 }}>
-            <Skeleton variant="text" width={120} height={32} sx={{ bgcolor: '#2a2a2a', mb: 2 }} />
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              {[1, 2, 3].map(i => (
-                <Skeleton key={i} variant="rectangular" width={160} height={280} sx={{ bgcolor: '#2a2a2a', borderRadius: 1, flexShrink: 0 }} />
+      <Box
+        component="main"
+        id="library-content"
+        sx={{
+          maxWidth: 1440,
+          mx: 'auto',
+          px: { xs: 2, sm: 4, md: 6 },
+          pt: { xs: 4, md: 6 },
+          pb: 6,
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 3,
+            flexWrap: 'wrap',
+            alignItems: 'end',
+            mb: 4,
+          }}
+        >
+          <Box>
+            <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: '0.18em' }}>
+              THE PERSONAL LIBRARY
+            </Typography>
+            <Typography
+              component="h1"
+              variant="h1"
+              sx={{ fontSize: { xs: 46, md: 72 }, mt: 0.5, mb: 1 }}
+            >
+              我的書庫<span style={{ color: 'var(--accent)' }}>。</span>
+            </Typography>
+            <Typography color="text.secondary">
+              {currentUser?.name} 的閱讀時光{' '}
+              <Box component="span" sx={{ mx: 1 }}>
+                ／
+              </Box>{' '}
+              {books.length} 本藏書
+            </Typography>
+          </Box>
+          <Button
+            component={Link}
+            to={`/upload?returnTo=${encodeURIComponent(returnUrl)}`}
+            variant="contained"
+            startIcon={<UploadFileIcon />}
+            sx={{ px: 3 }}
+          >
+            上傳書籍
+          </Button>
+        </Box>
+        <Box
+          component="nav"
+          aria-label="書庫分類"
+          sx={{
+            display: 'flex',
+            gap: 1,
+            flexWrap: 'wrap',
+            py: 2,
+            mb: 3,
+            borderTop: '1px solid',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          {[
+            ['', '全部藏書'],
+            ['reading', '繼續閱讀'],
+            ['saved', '稍後閱讀'],
+          ].map(([value, label]) => (
+            <Button
+              key={label}
+              component={Link}
+              to={value ? `/library?view=${value}` : '/library'}
+              aria-current={view === value || (!view && !value && !collection) ? 'page' : undefined}
+              variant={(view === value || (!view && !value)) && !collection ? 'contained' : 'text'}
+            >
+              {label}
+            </Button>
+          ))}
+          {[...new Set(books.map((b) => b.collection).filter(Boolean))].map((name) => (
+            <Chip
+              key={name}
+              label={name}
+              component={Link}
+              clickable
+              to={`/library?collection=${encodeURIComponent(name!)}`}
+              color={collection === name ? 'primary' : 'default'}
+              sx={{ height: 44 }}
+            />
+          ))}
+          {isFiltered && <Button onClick={() => setParams({})}>顯示全部</Button>}
+        </Box>
+        {actionError && (
+          <Alert severity="error" onClose={() => setActionError('')} sx={{ mb: 2 }}>
+            {actionError}
+          </Alert>
+        )}
+        {loadError ? (
+          <Alert severity="error" action={<Button onClick={loadData}>重試</Button>}>
+            書庫暫時無法載入，請重試。
+          </Alert>
+        ) : loading ? (
+          <Box>
+            <Skeleton
+              variant="text"
+              width={120}
+              height={32}
+              sx={{ bgcolor: 'background.paper', mb: 2 }}
+            />
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: 2,
+              }}
+            >
+              {[1, 2, 3].map((i) => (
+                <Skeleton
+                  key={i}
+                  variant="rectangular"
+                  height={280}
+                  sx={{ bgcolor: 'background.paper', borderRadius: 1, flexShrink: 0 }}
+                />
               ))}
             </Box>
           </Box>
         ) : (
           <>
-            {/* 繼續閱讀 */}
-            {continueReading.length > 0 && (
-              <Box sx={{ mb: 5, px: 2 }}>
-                <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>繼續閱讀</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
-                  {continueReading.map(({ book, percentage }) => (
-                    <BookCard key={book.id} {...cardProps} book={book} progressPercent={percentage} bookmarked={bookmarkSet.has(book.id)} showClearProgress canDelete={isUploader(book)} />
+            {isFiltered ? (
+              <Box>
+                <Typography component="h2" variant="h5" sx={{ mb: 3 }}>
+                  {filterTitle}{' '}
+                  <Typography component="span" color="text.secondary">
+                    ／{filteredBooks.length}
+                  </Typography>
+                </Typography>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: 'repeat(2, minmax(0, 1fr))',
+                      sm: 'repeat(3, minmax(0, 1fr))',
+                      md: 'repeat(4, minmax(0, 1fr))',
+                      lg: 'repeat(5, minmax(0, 1fr))',
+                    },
+                    gap: 2,
+                  }}
+                >
+                  {filteredBooks.map((book) => (
+                    <BookCard
+                      key={book.id}
+                      {...cardProps}
+                      book={book}
+                      progressPercent={progressMap.get(book.id)?.percentage}
+                      bookmarked={bookmarkSet.has(book.id)}
+                      showClearProgress={view === 'reading'}
+                      canDelete={isUploader(book)}
+                    />
                   ))}
                 </Box>
+                {!filteredBooks.length && (
+                  <Typography sx={{ py: 6 }} color="text.secondary">
+                    這個書架還沒有書。選一本喜歡的，開始閱讀吧。
+                  </Typography>
+                )}
               </Box>
-            )}
-
-            {/* 稍後閱讀 */}
-            {readLater.length > 0 && (
-              <Box sx={{ mb: 5, px: 2 }}>
-                <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>稍後閱讀</Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
-                  {readLater.map((book) => (
-                    <BookCard key={book.id} {...cardProps} book={book} bookmarked canDelete={isUploader(book)} />
-                  ))}
-                </Box>
-              </Box>
-            )}
-
-            {/* 書庫 — 分類或一般顯示 */}
-            {hasCollections ? (
+            ) : (
               <>
-                {/* Named collection grid sections */}
-                {collectionGroups.filter(g => g.collection !== null).map(g => (
-                  <Box key={g.collection} sx={{ mb: 5, px: 2 }}>
-                    <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
-                      {g.collection}
-                    </Typography>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
-                      {g.books.map(book => (
-                        <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
-                      ))}
-                    </Box>
+                {(continueReading.length > 0 || readLater.length > 0) && (
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: {
+                        xs: 'minmax(0, 1fr)',
+                        md:
+                          continueReading.length && readLater.length
+                            ? 'repeat(2, minmax(0, 1fr))'
+                            : 'minmax(0, 1fr)',
+                      },
+                      gap: { xs: 4, md: 4 },
+                      mb: 6,
+                    }}
+                  >
+                    {continueReading.length > 0 && (
+                      <Box component="section" aria-labelledby="continue-heading">
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            mb: 1.5,
+                          }}
+                        >
+                          <Typography
+                            id="continue-heading"
+                            component="h2"
+                            variant="h6"
+                            sx={{ fontWeight: 700 }}
+                          >
+                            繼續閱讀
+                          </Typography>
+                          <Button component={Link} to="/library?view=reading" size="small">
+                            查看全部 · {continueReading.length}
+                          </Button>
+                        </Box>
+                        <Box sx={{ display: 'grid', gap: 2 }}>
+                          {continueReading.slice(0, 2).map(({ book, percentage }) => (
+                            <BookCard
+                              key={book.id}
+                              {...cardProps}
+                              compact
+                              book={book}
+                              progressPercent={percentage}
+                              bookmarked={bookmarkSet.has(book.id)}
+                              showClearProgress
+                              canDelete={isUploader(book)}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                    {readLater.length > 0 && (
+                      <Box component="section" aria-labelledby="saved-heading">
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            mb: 1.5,
+                          }}
+                        >
+                          <Typography
+                            id="saved-heading"
+                            component="h2"
+                            variant="h6"
+                            sx={{ fontWeight: 700 }}
+                          >
+                            稍後閱讀
+                          </Typography>
+                          <Button component={Link} to="/library?view=saved" size="small">
+                            查看全部 · {readLater.length}
+                          </Button>
+                        </Box>
+                        <Box sx={{ display: 'grid', gap: 2 }}>
+                          {readLater.slice(0, 2).map((book) => (
+                            <BookCard
+                              key={book.id}
+                              {...cardProps}
+                              compact
+                              book={book}
+                              bookmarked
+                              canDelete={isUploader(book)}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
                   </Box>
-                ))}
-                {/* Uncategorized books */}
-                {(() => {
-                  const uncategorized = collectionGroups.find(g => g.collection === null)
-                  if (!uncategorized || uncategorized.books.length === 0) return null
-                  return (
-                    <Box sx={{ px: 2 }}>
-                      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>其他書籍</Typography>
-                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
-                        {uncategorized.books.map(book => (
-                          <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
+                )}
+
+                {/* 書庫 — 分類或一般顯示 */}
+                {hasCollections ? (
+                  <>
+                    {/* Named collection grid sections */}
+                    {collectionGroups
+                      .filter((g) => g.collection !== null)
+                      .map((g) => (
+                        <Box key={g.collection} sx={{ mb: 5 }}>
+                          <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
+                            {g.collection}
+                          </Typography>
+                          <Box
+                            sx={{
+                              display: 'grid',
+                              gridTemplateColumns: {
+                                xs: 'repeat(2, minmax(0, 1fr))',
+                                sm: 'repeat(3, minmax(0, 1fr))',
+                                md: 'repeat(4, minmax(0, 1fr))',
+                                lg: 'repeat(5, minmax(0, 1fr))',
+                              },
+                              gap: 2,
+                            }}
+                          >
+                            {g.books.map((book) => (
+                              <BookCard
+                                key={book.id}
+                                {...cardProps}
+                                book={book}
+                                bookmarked={bookmarkSet.has(book.id)}
+                                canDelete={isUploader(book)}
+                              />
+                            ))}
+                          </Box>
+                        </Box>
+                      ))}
+                    {/* Uncategorized books */}
+                    {(() => {
+                      const uncategorized = collectionGroups.find((g) => g.collection === null)
+                      if (!uncategorized || uncategorized.books.length === 0) return null
+                      return (
+                        <Box>
+                          <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
+                            其他書籍
+                          </Typography>
+                          <Box
+                            sx={{
+                              display: 'grid',
+                              gridTemplateColumns: {
+                                xs: 'repeat(2, minmax(0, 1fr))',
+                                sm: 'repeat(3, minmax(0, 1fr))',
+                                md: 'repeat(4, minmax(0, 1fr))',
+                                lg: 'repeat(5, minmax(0, 1fr))',
+                              },
+                              gap: 2,
+                            }}
+                          >
+                            {uncategorized.books.map((book) => (
+                              <BookCard
+                                key={book.id}
+                                {...cardProps}
+                                book={book}
+                                bookmarked={bookmarkSet.has(book.id)}
+                                canDelete={isUploader(book)}
+                              />
+                            ))}
+                          </Box>
+                        </Box>
+                      )
+                    })()}
+                  </>
+                ) : (
+                  /* No collections — original grid display */
+                  otherBooks.length > 0 && (
+                    <Box>
+                      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
+                        書庫
+                      </Typography>
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: {
+                            xs: 'repeat(2, minmax(0, 1fr))',
+                            sm: 'repeat(3, minmax(0, 1fr))',
+                            md: 'repeat(4, minmax(0, 1fr))',
+                            lg: 'repeat(5, minmax(0, 1fr))',
+                          },
+                          gap: 2,
+                        }}
+                      >
+                        {otherBooks.map((book) => (
+                          <BookCard
+                            key={book.id}
+                            {...cardProps}
+                            book={book}
+                            bookmarked={bookmarkSet.has(book.id)}
+                            canDelete={isUploader(book)}
+                          />
                         ))}
                       </Box>
                     </Box>
                   )
-                })()}
+                )}
               </>
-            ) : (
-              /* No collections — original grid display */
-              otherBooks.length > 0 && (
-                <Box sx={{ px: 2 }}>
-                  <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
-                    書庫
-                  </Typography>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
-                    {otherBooks.map((book) => (
-                      <BookCard key={book.id} {...cardProps} book={book} bookmarked={bookmarkSet.has(book.id)} canDelete={isUploader(book)} />
-                    ))}
-                  </Box>
-                </Box>
-              )
             )}
-
             {books.length === 0 && (
-              <Box sx={{ textAlign: 'center', mt: 12, color: 'grey.600' }}>
+              <Box sx={{ textAlign: 'center', mt: 12, color: 'text.secondary' }}>
                 <Typography variant="h6">書庫是空的</Typography>
-                <Typography variant="body2" sx={{ mt: 1 }}>點擊右下角 + 上傳書籍</Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  上傳第一本書，開始你的閱讀時光。
+                </Typography>
               </Box>
             )}
           </>
         )}
       </Box>
 
-      <SpeedDial
-        ariaLabel="上傳書籍"
-        sx={{ position: 'fixed', bottom: 24, right: 24 }}
-        icon={<SpeedDialIcon />}
+      <Box
+        component="footer"
+        sx={{
+          mx: { xs: 2, sm: 4, md: 6 },
+          py: 3,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          justifyContent: 'space-between',
+          color: 'text.secondary',
+        }}
       >
-        <SpeedDialAction
-          icon={<FolderIcon />}
-          tooltipTitle="選擇資料夾"
-          onClick={() => openFilePicker(true)}
-        />
-        <SpeedDialAction
-          icon={<UploadFileIcon />}
-          tooltipTitle="選擇檔案"
-          onClick={() => openFilePicker(false)}
-        />
-      </SpeedDial>
-
+        <Typography variant="caption">一本書，一段自己的時間。</Typography>
+        <Typography variant="caption">READFLIX · v{APP_VERSION}</Typography>
+      </Box>
+      <Dialog
+        open={uploadOpen && uploadFiles.length === 0}
+        onClose={closePanel}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>上傳書籍</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary" sx={{ mb: 3 }}>
+            選擇 EPUB、PDF 或 TXT，加入你的書庫。重新整理後需重新選取檔案。
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              startIcon={<UploadFileIcon />}
+              onClick={() => openFilePicker(false)}
+            >
+              選擇檔案
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<FolderIcon />}
+              onClick={() => openFilePicker(true)}
+            >
+              選擇資料夾
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closePanel}>關閉</Button>
+        </DialogActions>
+      </Dialog>
       <UploadDialog
-        open={uploadOpen}
+        open={uploadOpen && uploadFiles.length > 0}
         files={uploadFiles}
         userId={currentUser?.id ?? ''}
-        onClose={() => setUploadOpen(false)}
+        onClose={() => {
+          setUploadFiles([])
+          if (uploadOpen) closePanel()
+        }}
         onAllDone={handleUploadDone}
       />
 
@@ -562,49 +1100,41 @@ export default function BookLibrary() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmBook(null)}>取消</Button>
-          <Button onClick={confirmDelete} color="error" variant="contained">刪除</Button>
+          <Button onClick={confirmDelete} color="error" variant="contained">
+            刪除
+          </Button>
         </DialogActions>
       </Dialog>
-
-      {/* PROFILE 按鈕 */}
-      <Button
-        variant="outlined"
-        startIcon={<PersonIcon />}
-        onClick={openProfile}
-        sx={{
-          position: 'fixed',
-          bottom: 24,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          borderRadius: 8,
-          px: 4,
-          py: 1,
-          bgcolor: 'rgba(0,0,0,0.6)',
-          color: '#fff',
-          borderColor: 'rgba(255,255,255,0.2)',
-          '&:hover': { bgcolor: 'rgba(0,0,0,0.8)', borderColor: 'rgba(255,255,255,0.4)' },
-          zIndex: 10,
-        }}
-      >
-        個人設定
-      </Button>
 
       {/* 個人設定 Drawer */}
       <Drawer
         anchor="bottom"
         open={profileOpen}
-        onClose={() => setProfileOpen(false)}
+        onClose={() => closePanel()}
         PaperProps={{
           sx: {
             borderTopLeftRadius: 12,
             borderTopRightRadius: 12,
             px: 3,
             py: 3,
-            maxHeight: '50%',
+            maxHeight: '90dvh',
+            width: '100%',
+            maxWidth: 640,
+            mx: 'auto',
           },
         }}
       >
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>個人設定</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography component="h2" variant="h5">
+            個人設定
+          </Typography>
+          <IconButton aria-label="關閉個人設定" onClick={closePanel}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+        <Box sx={{ mb: 4 }}>
+          <ThemeSwitch expanded />
+        </Box>
 
         <TextField
           label="名稱"
@@ -616,23 +1146,30 @@ export default function BookLibrary() {
           sx={{ mb: 3 }}
         />
 
-        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>頭像顏色</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+          頭像顏色
+        </Typography>
         <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
           {PROFILE_COLORS.map((color) => (
-            <Avatar
+            <IconButton
               key={color}
-              sx={{
-                bgcolor: color,
-                width: 40,
-                height: 40,
-                cursor: 'pointer',
-                border: profileColor === color ? '3px solid #fff' : '3px solid transparent',
-                boxShadow: profileColor === color ? `0 0 0 2px ${color}` : 'none',
-              }}
+              aria-label={`頭像顏色 ${color}`}
+              aria-pressed={profileColor === color}
               onClick={() => setProfileColor(color)}
             >
-              {profileColor === color ? '✓' : ''}
-            </Avatar>
+              <Avatar
+                sx={{
+                  bgcolor: color,
+                  width: 40,
+                  height: 40,
+                  cursor: 'pointer',
+                  border: profileColor === color ? '3px solid var(--ink)' : '3px solid transparent',
+                  boxShadow: profileColor === color ? `0 0 0 2px ${color}` : 'none',
+                }}
+              >
+                {profileColor === color ? '✓' : ''}
+              </Avatar>
+            </IconButton>
           ))}
         </Box>
 

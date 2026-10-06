@@ -128,3 +128,13 @@ docker compose -f docker-compose.prod.yml up -d
 ## 測試
 - 需要進行前後端的單元測試
 - 需要使用playwright進行開發人員可視的整合測試，模擬實際使用情境
+
+## 1.1.0：網址與裝置外觀
+
+- `/`、`/readers`：選擇讀者；`/readers/new`：新增讀者。
+- `/library`：全部書庫；`?view=reading`、`?view=saved`、`?collection=分類名稱`：書架篩選。
+- `/settings`：個人設定；`/upload`：選取上傳檔案。檔案不存入 URL，刷新後需重新選取。
+- `/reader/:bookId`：EPUB／PDF／TXT；`?panel=settings|contents|bookmarks`：閱讀面板。
+- 舊 `/library`、`/reader/:bookId` 網址保持相容。未選讀者時先選擇，再回到原網址。選擇讀者沿用共用書庫模式，不是身份驗證。
+- 全站深色／淺色／跟隨系統只存於目前瀏覽器；讀者 API 的主題不覆蓋本機選擇。閱讀位置與排版設定仍透過 API 保存。
+- 本機 QA 與證據：`frontend/tests/qa/README.md`、`openspec/changes/routes-device-theme/verification.md`。

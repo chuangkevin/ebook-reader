@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef } from 'react'
 import {
   Box,
+  IconButton,
   Drawer,
   Slider,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import ThemeSwitch from '../ThemeSwitch'
+import { useDeviceTheme } from '../../theme/deviceTheme'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { api } from '../../services/api.service'
 import type { ReaderSettings as ReaderSettingsType } from '../../types/index'
@@ -21,28 +25,47 @@ interface ReaderSettingsProps {
 
 export default function ReaderSettings({ open, onClose, userId }: ReaderSettingsProps) {
   const { settings, setSettings } = useSettingsStore()
+  const { paper, setPaper } = useDeviceTheme()
 
   // Debounced auto-save
+  const pendingSave = useRef<ReaderSettingsType | null>(null)
+  const saveLayout = useCallback(
+    (updated: ReaderSettingsType) =>
+      api.settings.update(userId, {
+        writingMode: updated.writingMode,
+        fontSize: updated.fontSize,
+        gap: updated.gap,
+        openccMode: updated.openccMode,
+        tapZoneLayout: updated.tapZoneLayout,
+      }),
+    [userId]
+  )
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const scheduleSave = useCallback(
     (updated: ReaderSettingsType) => {
+      pendingSave.current = updated
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
-        api.settings.update(userId, updated).catch(() => {
+        pendingSave.current = null
+        saveLayout(updated).catch(() => {
           // Save failed silently
         })
       }, 500)
     },
-    [userId]
+    [saveLayout]
   )
 
-  // Cancel pending save on unmount
+  // Flush the final layout choice when leaving the reader before the debounce fires.
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (pendingSave.current) {
+        void saveLayout(pendingSave.current).catch(() => {})
+        pendingSave.current = null
+      }
     }
-  }, [])
+  }, [saveLayout])
 
   function handleWritingMode(_: React.MouseEvent, value: ReaderSettingsType['writingMode'] | null) {
     if (!value) return
@@ -62,13 +85,6 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
     const gap = value as number
     const updated = { ...settings, gap }
     setSettings({ gap })
-    scheduleSave(updated)
-  }
-
-  function handleTheme(_: React.MouseEvent, value: ReaderSettingsType['theme'] | null) {
-    if (!value) return
-    const updated = { ...settings, theme: value }
-    setSettings({ theme: value })
     scheduleSave(updated)
   }
 
@@ -93,7 +109,10 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
       onClose={onClose}
       PaperProps={{
         sx: {
-          height: '60%',
+          maxHeight: '85dvh',
+          width: '100%',
+          maxWidth: 640,
+          mx: 'auto',
           borderTopLeftRadius: 12,
           borderTopRightRadius: 12,
           px: 3,
@@ -102,6 +121,17 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
         },
       }}
     >
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography component="h2" variant="h5">
+          閱讀設定
+        </Typography>
+        <IconButton aria-label="關閉閱讀設定" onClick={onClose}>
+          <CloseIcon />
+        </IconButton>
+      </Box>
+      <Box sx={{ mb: 3 }}>
+        <ThemeSwitch expanded />
+      </Box>
       {/* 排版模式 */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
@@ -124,6 +154,7 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
           字體大小：{settings.fontSize}px
         </Typography>
         <Slider
+          aria-label="字體大小"
           value={settings.fontSize}
           min={14}
           max={28}
@@ -142,6 +173,7 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
           邊距：{Math.round((settings.gap ?? 0.06) * 100)}%
         </Typography>
         <Slider
+          aria-label="邊距"
           value={settings.gap ?? 0.06}
           min={0.02}
           max={0.15}
@@ -153,27 +185,22 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
         />
       </Box>
 
-      {/* 主題 */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          主題
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          閱讀底色
         </Typography>
         <ToggleButtonGroup
-          value={settings.theme}
+          aria-label="閱讀底色"
+          value={paper}
           exclusive
-          onChange={handleTheme}
-          size="small"
+          onChange={(_, value) => value && setPaper(value)}
         >
-          <ToggleButton value="light" sx={{ bgcolor: '#ffffff', '&.Mui-selected': { bgcolor: '#ffffff' } }}>
-            亮色
-          </ToggleButton>
-          <ToggleButton value="sepia" sx={{ bgcolor: '#f5ecd7', '&.Mui-selected': { bgcolor: '#f5ecd7' } }}>
-            護眼
-          </ToggleButton>
-          <ToggleButton value="dark" sx={{ bgcolor: '#1a1a1a', color: '#fff', '&.Mui-selected': { bgcolor: '#1a1a1a', color: '#fff' } }}>
-            暗色
-          </ToggleButton>
+          <ToggleButton value="default">跟隨畫面</ToggleButton>
+          <ToggleButton value="sepia">暖紙色</ToggleButton>
         </ToggleButtonGroup>
+        <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+          暖紙色用於淺色模式；PDF 保留原始頁面色彩。
+        </Typography>
       </Box>
 
       {/* 簡繁轉換 */}
@@ -212,8 +239,8 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
           {settings.tapZoneLayout === 'default'
             ? '左側＝上一頁，右側＝下一頁'
             : settings.tapZoneLayout === 'bottom-next'
-            ? '上半＝上一頁，下半＝下一頁'
-            : '上半＝下一頁，下半＝上一頁'}
+              ? '上半＝上一頁，下半＝下一頁'
+              : '上半＝下一頁，下半＝上一頁'}
         </Typography>
       </Box>
     </Drawer>

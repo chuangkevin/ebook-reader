@@ -47,7 +47,7 @@ function normalizeBook(raw: any): Book {
     title: raw.title,
     author: raw.author,
     format: raw.format,
-    coverUrl: `/api/books/${raw.id}/cover`,
+    coverUrl: raw.coverPath ? `/api/books/${raw.id}/cover` : undefined,
     progress: raw.progress,
     addedAt: raw.uploadedAt ? String(raw.uploadedAt) : '',
     uploadedBy: raw.uploadedBy,
@@ -121,6 +121,8 @@ async function updateProgress(userId: string, bookId: string, progress: string, 
       const third = parts.length >= 3 ? parseFloat(parts[2]) : 0
       if (format === 'pdf' && second > 0) {
         percentage = Math.round((first / second) * 100)
+      } else if (format === 'txt') {
+        percentage = Math.round(first * 100)
       } else if (format !== 'pdf' && third > 0) {
         percentage = Math.round(((first + second) / third) * 100)
       } else {
@@ -135,6 +137,7 @@ async function updateProgress(userId: string, bookId: string, progress: string, 
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ cfi: progress, percentage }),
+    keepalive: true,
   })
 }
 
@@ -143,7 +146,7 @@ async function getSettings(userId: string): Promise<ReaderSettings> {
   return request<ReaderSettings>(`/users/${userId}/settings`)
 }
 
-async function updateSettings(userId: string, settings: ReaderSettings): Promise<void> {
+async function updateSettings(userId: string, settings: Omit<ReaderSettings, 'theme'>): Promise<void> {
   return request<void>(`/users/${userId}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

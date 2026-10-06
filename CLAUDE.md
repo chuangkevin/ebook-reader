@@ -54,7 +54,7 @@ docker compose up -d
 | Port | Service |
 |------|---------|
 | 5173 | Frontend (Vite dev) |
-| 3000 | Backend API |
+| 3003 | Backend API |
 
 ## Docker
 
@@ -62,3 +62,10 @@ docker compose up -d
 docker compose up -d           # Production
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+## Navigation and appearance
+
+- Routes, device appearance and QA contract: `openspec/changes/routes-device-theme/`.
+- Device light/dark/system belongs to localStorage, never the account settings API.
+- Local SQLite development uses Node 24; production Docker currently uses Node 20.
+- Main push automatically publishes/deploys. This Readflix 1.1.1 release was explicitly authorized on 2026-10-06; future unrelated releases still require their own scope.

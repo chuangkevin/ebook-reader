@@ -1,10 +1,30 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Readflix</title>
+    <meta name="theme-color" content="#f5f2eb" />
+    <script>
+      ;(() => {
+        let saved
+        try {
+          saved = localStorage.getItem('readflix.appearance')
+        } catch {}
+        const mode =
+          saved === 'light' || saved === 'dark'
+            ? saved
+            : matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+        const root = document.documentElement
+        root.dataset.theme = mode
+        root.style.colorScheme = mode
+        root.style.backgroundColor = mode === 'dark' ? '#181a19' : '#f5f2eb'
+        document.querySelector('meta[name="theme-color"]').content = root.style.backgroundColor
+      })()
+    </script>
+    <title>Readflix · 留一點時間給閱讀</title>
   </head>
   <body>
     <div id="root"></div>

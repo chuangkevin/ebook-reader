@@ -1,5 +1,6 @@
+import { APP_VERSION } from '../version'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   Box,
   Button,
@@ -21,20 +22,27 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import { api } from '../services/api.service'
 import { useUserStore } from '../stores/userStore'
+import ThemeSwitch from '../components/ThemeSwitch'
+import { routePath, safeReturnTo } from '../utils/navigation'
 import type { User } from '../types/index'
 
 export default function UserSelectionScreen() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [params] = useSearchParams()
+  const dialogOpen = routePath(location.pathname) === '/readers/new'
+  const setDialogOpen = (open: boolean) =>
+    navigate({ pathname: open ? '/readers/new' : '/', search: location.search })
   const { users, setUsers, setCurrentUser } = useUserStore()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
-    api.users.list()
+    api.users
+      .list()
       .then((data) => {
         setUsers(data)
         setError(null)
@@ -45,7 +53,7 @@ export default function UserSelectionScreen() {
 
   const handleSelectUser = (user: User) => {
     setCurrentUser(user)
-    navigate('/library')
+    navigate(safeReturnTo(params.get('returnTo')), { replace: true })
   }
 
   const handleOpenDialog = () => {
@@ -90,20 +98,51 @@ export default function UserSelectionScreen() {
     <Box
       sx={{
         minHeight: '100dvh',
-        bgcolor: '#121212',
-        color: 'white',
+        bgcolor: 'background.default',
+        color: 'text.primary',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        px: 3,
-        py: 6,
+        px: { xs: 2, sm: 5 },
+        py: 3,
       }}
     >
-      <Typography variant="h4" fontWeight={700} mb={5}>
-        選擇讀者
-      </Typography>
+      <Box
+        sx={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          pb: 2,
+        }}
+      >
+        <Typography
+          sx={{
+            fontFamily: 'Baskerville, serif',
+            fontSize: 28,
+            fontWeight: 700,
+            letterSpacing: '-1px',
+          }}
+        >
+          readflix<span style={{ color: 'var(--accent)' }}>.</span>
+        </Typography>
+        <ThemeSwitch />
+      </Box>
+      <Box sx={{ textAlign: 'center', mt: { xs: 7, sm: 10 }, mb: 6 }}>
+        <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: '0.2em' }}>
+          YOUR READING ROOM
+        </Typography>
+        <Typography component="h1" variant="h1" sx={{ fontSize: { xs: 42, sm: 64 }, my: 2 }}>
+          留一點時間，給閱讀。
+        </Typography>
+        <Typography component="h2" variant="body1" color="text.secondary">
+          選擇讀者，從上次停下的地方開始。
+        </Typography>
+      </Box>
 
-      {loading && <CircularProgress sx={{ color: 'white', mt: 4 }} />}
+      {loading && <CircularProgress sx={{ color: 'text.primary', mt: 4 }} />}
 
       {error && (
         <Typography color="error" mt={2}>
@@ -117,14 +156,18 @@ export default function UserSelectionScreen() {
             <Grid key={user.id}>
               <Card
                 sx={{
-                  width: 140,
-                  bgcolor: '#1e1e1e',
-                  color: 'white',
+                  width: { xs: 148, sm: 170 },
+                  bgcolor: 'background.paper',
+                  color: 'text.primary',
                   position: 'relative',
-                  '&:hover': { bgcolor: '#2a2a2a' },
+                  '&:hover': { bgcolor: 'action.hover' },
                 }}
               >
-                <CardActionArea onClick={() => handleSelectUser(user)} sx={{ pb: 1 }}>
+                <CardActionArea
+                  aria-label={`選擇讀者 ${user.name}`}
+                  onClick={() => handleSelectUser(user)}
+                  sx={{ pb: 5, pt: 1 }}
+                >
                   <CardContent
                     sx={{
                       display: 'flex',
@@ -136,7 +179,12 @@ export default function UserSelectionScreen() {
                   >
                     <Avatar
                       src={user.avatar}
-                      sx={{ width: 64, height: 64, bgcolor: user.avatarColor ?? '#5c6bc0', fontSize: 28 }}
+                      sx={{
+                        width: 64,
+                        height: 64,
+                        bgcolor: user.avatarColor ?? '#5c6bc0',
+                        fontSize: 28,
+                      }}
                     >
                       {!user.avatar && user.name.charAt(0).toUpperCase()}
                     </Avatar>
@@ -153,13 +201,14 @@ export default function UserSelectionScreen() {
                 </CardActionArea>
                 <IconButton
                   size="small"
+                  aria-label={`刪除讀者 ${user.name}`}
                   onClick={(e) => handleDelete(e, user.id)}
                   disabled={deletingId === user.id}
                   sx={{
                     position: 'absolute',
                     bottom: 4,
                     right: 4,
-                    color: 'rgba(255,255,255,0.4)',
+                    color: 'text.secondary',
                     '&:hover': { color: '#ef5350' },
                   }}
                 >
@@ -176,11 +225,12 @@ export default function UserSelectionScreen() {
           <Grid>
             <Card
               sx={{
-                width: 140,
+                width: { xs: 148, sm: 170 },
                 height: '100%',
                 minHeight: 140,
-                bgcolor: '#1e1e1e',
-                border: '2px dashed rgba(255,255,255,0.2)',
+                bgcolor: 'background.paper',
+                border: '1px dashed',
+                borderColor: 'divider',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -198,8 +248,8 @@ export default function UserSelectionScreen() {
                   py: 2,
                 }}
               >
-                <PersonAddIcon sx={{ color: 'rgba(255,255,255,0.5)', fontSize: 36 }} />
-                <Typography variant="body2" color="rgba(255,255,255,0.5)">
+                <PersonAddIcon sx={{ color: 'text.secondary', fontSize: 36 }} />
+                <Typography variant="body2" color="text.secondary">
                   新增讀者
                 </Typography>
               </CardActionArea>
@@ -208,10 +258,21 @@ export default function UserSelectionScreen() {
         </Grid>
       )}
 
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 8 }}>
+        READFLIX / 私人的閱讀時光 · v{APP_VERSION}
+      </Typography>
+
       <Dialog
         open={dialogOpen}
         onClose={handleCloseDialog}
-        PaperProps={{ sx: { bgcolor: '#1e1e1e', color: 'white', minWidth: 320 } }}
+        PaperProps={{
+          sx: {
+            bgcolor: 'background.paper',
+            color: 'text.primary',
+            width: 420,
+            maxWidth: 'calc(100vw - 48px)',
+          },
+        }}
       >
         <DialogTitle>新增讀者</DialogTitle>
         <DialogContent>
@@ -226,14 +287,14 @@ export default function UserSelectionScreen() {
             disabled={creating}
             sx={{
               mt: 1,
-              '& .MuiOutlinedInput-root': { color: 'white' },
-              '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.6)' },
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.3)' },
+              '& .MuiOutlinedInput-root': { color: 'text.primary' },
+              '& .MuiInputLabel-root': { color: 'text.secondary' },
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
             }}
           />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseDialog} disabled={creating} sx={{ color: 'rgba(255,255,255,0.6)' }}>
+          <Button onClick={handleCloseDialog} disabled={creating} sx={{ color: 'text.secondary' }}>
             取消
           </Button>
           <Button
