@@ -5,6 +5,7 @@ import jschardet from 'jschardet';
 import iconv from 'iconv-lite';
 import bookService from '../services/book.service';
 import { getFormatFromFilename } from '../middleware/upload.middleware';
+import type { Book } from '../types';
 import logger from '../utils/logger';
 
 class BookController {
@@ -146,6 +147,53 @@ class BookController {
     } catch (error) {
       logger.error('Failed to serve book file:', error);
       res.status(500).json({ error: 'Failed to serve book file' });
+    }
+  }
+
+  async downloadZip(req: Request, res: Response): Promise<void> {
+    try {
+      const rawIds: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const ids = rawIds.filter((x): x is string => typeof x === 'string' && x.length > 0);
+      if (!ids.length) {
+        res.status(400).json({ error: 'ids is required' });
+        return;
+      }
+
+      const books = ids
+        .map((id) => bookService.getById(id))
+        .filter((book): book is Book => !!book && fs.existsSync(book.filePath));
+      if (!books.length) {
+        res.status(404).json({ error: 'No downloadable books found' });
+        return;
+      }
+
+      const AdmZip = (await import('adm-zip')).default;
+      const zip = new AdmZip();
+
+      // zip 內檔名：過濾路徑非法字元，同名書加序號避免互相覆蓋
+      const usedNames = new Set<string>();
+      for (const book of books) {
+        const safeTitle = book.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || book.id;
+        let name = `${safeTitle}.${book.format}`;
+        let n = 2;
+        while (usedNames.has(name)) {
+          name = `${safeTitle} (${n++}).${book.format}`;
+        }
+        usedNames.add(name);
+        zip.addFile(name, fs.readFileSync(book.filePath));
+      }
+
+      const buf = zip.toBuffer();
+      const stamp = new Date().toISOString().slice(0, 10);
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="readflix-books-${stamp}.zip"`);
+      res.setHeader('Content-Length', String(buf.length));
+      res.send(buf);
+    } catch (error) {
+      logger.error('Failed to build zip:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to build zip' });
+      }
     }
   }
 

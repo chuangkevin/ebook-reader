@@ -6,6 +6,7 @@ const router = Router();
 
 router.get('/books', (req, res) => bookController.getAll(req, res));
 router.post('/books', uploadMiddleware.single('file'), (req, res) => bookController.upload(req, res));
+router.post('/books/download-zip', (req, res) => bookController.downloadZip(req, res));
 router.get('/books/:id', (req, res) => bookController.getById(req, res));
 router.delete('/books/:id', (req, res) => bookController.delete(req, res));
 router.get('/books/:id/file', (req, res) => bookController.serveFile(req, res));

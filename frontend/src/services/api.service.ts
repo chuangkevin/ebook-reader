@@ -103,6 +103,33 @@ async function removeBook(bookId: string, userId: string): Promise<void> {
   return request<void>(`/books/${bookId}?requestedBy=${encodeURIComponent(userId)}`, { method: 'DELETE' })
 }
 
+// 批次下載：後端打包 zip，前端觸發瀏覽器存檔
+async function downloadBooksZip(bookIds: string[]): Promise<void> {
+  const response = await fetch(`${API_BASE}/books/download-zip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: bookIds }),
+  })
+  if (!response.ok) {
+    let message = `API error: ${response.status} ${response.statusText}`
+    try {
+      const data = await response.json()
+      if (data?.error) message = data.error
+    } catch { /* 非 JSON 錯誤回應，保留預設訊息 */ }
+    throw new Error(message)
+  }
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const filename = response.headers.get('content-disposition')?.match(/filename="?([^";]+)"?/)?.[1]
+  a.href = url
+  a.download = filename || 'readflix-books.zip'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
 async function updateProgress(userId: string, bookId: string, progress: string, format: string): Promise<void> {
   // Parse progress string to cfi + percentage
   // EPUB: @@chapterIndex@@sectionFraction@@totalSections -> (chapterIndex+sectionFraction)/totalSections * 100
@@ -211,6 +238,7 @@ export const api = {
     get: getBook,
     upload: uploadBook,
     remove: removeBook,
+    downloadZip: downloadBooksZip,
     updateProgress,
     getUserProgress,
     clearProgress,

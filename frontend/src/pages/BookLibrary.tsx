@@ -29,6 +29,8 @@ import {
 } from '@mui/material'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
+import AddIcon from '@mui/icons-material/Add'
+import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
 import DownloadIcon from '@mui/icons-material/Download'
@@ -108,9 +110,12 @@ interface BookCardProps {
   bookmarked?: boolean
   showClearProgress?: boolean
   canDelete?: boolean
+  selectMode?: boolean
+  selectedIds?: Set<string>
   onDelete: (book: Book) => void
   onBookmark: (bookId: string) => void
   onClearProgress?: (bookId: string) => void
+  onToggleSelect?: (bookId: string) => void
 }
 
 function BookCard({
@@ -120,14 +125,18 @@ function BookCard({
   bookmarked,
   showClearProgress,
   canDelete,
+  selectMode = false,
+  selectedIds,
   onDelete,
   onBookmark,
   onClearProgress,
+  onToggleSelect,
 }: BookCardProps) {
   const location = useLocation()
   const from = libraryReturn(location.pathname + location.search)
   const [coverFailed, setCoverFailed] = useState(false)
   const pct = progressPercent ?? parseProgressPercent(book.progress)
+  const selected = selectMode && !!selectedIds?.has(book.id)
 
   return (
     <Card
@@ -140,16 +149,47 @@ function BookCard({
         display: 'flex',
         flexDirection: 'column',
         border: '1px solid',
-        borderColor: 'divider',
+        borderColor: selected ? 'primary.main' : 'divider',
+        boxShadow: selected ? '0 0 0 2px var(--accent, #1976d2) inset' : undefined,
         borderRadius: 1,
         transition: 'transform 180ms ease',
         '&:hover': { transform: 'translateY(-4px)' },
       }}
     >
+      {selectMode && (
+        <Box
+          aria-hidden="true"
+          sx={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            zIndex: 1,
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: selected ? 'primary.main' : 'rgba(0,0,0,0.35)',
+            color: '#fff',
+          }}
+        >
+          {selected ? <CheckIcon sx={{ fontSize: 18 }} /> : <AddIcon sx={{ fontSize: 18 }} />}
+        </Box>
+      )}
       <CardActionArea
-        aria-label={`閱讀 ${book.title}`}
+        aria-label={selectMode ? `選擇 ${book.title} 批次下載` : `閱讀 ${book.title}`}
+        aria-pressed={selectMode ? selected : undefined}
         component={Link}
         to={`/reader/${encodeURIComponent(book.id)}?from=${encodeURIComponent(from)}`}
+        onClick={
+          selectMode
+            ? (e) => {
+                e.preventDefault()
+                onToggleSelect?.(book.id)
+              }
+            : undefined
+        }
         sx={{
           flexGrow: 1,
           display: compact ? 'grid' : 'flex',
@@ -264,6 +304,7 @@ function BookCard({
       </CardActionArea>
 
       {/* Actions remain outside the reading link and never cover the book artwork. */}
+      {!selectMode && (
       <Box
         sx={{
           position: compact ? 'absolute' : 'static',
@@ -364,6 +405,7 @@ function BookCard({
           </Tooltip>
         )}
       </Box>
+      )}
     </Card>
   )
 }
@@ -397,6 +439,9 @@ export default function BookLibrary() {
   const [profileColor, setProfileColor] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [zipping, setZipping] = useState(false)
 
   const loadData = useCallback(async () => {
     if (!currentUser) {
@@ -582,6 +627,9 @@ export default function BookLibrary() {
     onDelete: handleDelete,
     onBookmark: handleBookmark,
     onClearProgress: handleClearProgress,
+    selectMode,
+    selectedIds: selected,
+    onToggleSelect: toggleSelect,
   }
   const isUploader = (book: Book) => !!currentUser && book.uploadedBy === currentUser.id
 
@@ -625,6 +673,36 @@ export default function BookLibrary() {
     collection === '__none__'
       ? '其他書籍'
       : collection || (view === 'reading' ? '繼續閱讀' : '稍後閱讀')
+
+  // 批次下載多選
+  const visibleBookIds = (isFiltered ? filteredBooks : books).map((b) => b.id)
+
+  function toggleSelect(bookId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(bookId)) next.delete(bookId)
+      else next.add(bookId)
+      return next
+    })
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false)
+    setSelected(new Set())
+  }
+
+  async function handleDownloadSelected() {
+    if (!selected.size) return
+    setZipping(true)
+    try {
+      await api.books.downloadZip([...selected])
+      exitSelectMode()
+    } catch (e) {
+      setActionError(e instanceof Error ? `批次下載失敗：${e.message}` : '批次下載失敗，請重試。')
+    } finally {
+      setZipping(false)
+    }
+  }
 
   async function saveProfile() {
     if (!currentUser || !profileName.trim()) return
@@ -772,6 +850,31 @@ export default function BookLibrary() {
             />
           ))}
           {isFiltered && <Button onClick={() => setParams({})}>顯示全部</Button>}
+          <Box sx={{ flex: 1 }} />
+          {!selectMode ? (
+            <Button
+              startIcon={<DownloadIcon />}
+              onClick={() => setSelectMode(true)}
+              disabled={!books.length}
+            >
+              批次下載
+            </Button>
+          ) : (
+            <>
+              <Button onClick={() => setSelected(new Set(visibleBookIds))}>
+                全選（{visibleBookIds.length}）
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<DownloadIcon />}
+                disabled={!selected.size || zipping}
+                onClick={handleDownloadSelected}
+              >
+                {zipping ? '打包中…' : `下載所選（${selected.size}）`}
+              </Button>
+              <Button onClick={exitSelectMode}>取消</Button>
+            </>
+          )}
         </Box>
         {actionError && (
           <Alert severity="error" onClose={() => setActionError('')} sx={{ mb: 2 }}>
