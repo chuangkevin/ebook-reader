@@ -31,6 +31,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
+import DownloadIcon from '@mui/icons-material/Download'
 import FolderIcon from '@mui/icons-material/Folder'
 import PersonIcon from '@mui/icons-material/Person'
 import SwitchAccountIcon from '@mui/icons-material/SwitchAccount'
@@ -269,6 +270,7 @@ function BookCard({
           bottom: compact ? 0 : undefined,
           right: compact ? 4 : undefined,
           display: 'flex',
+          flexWrap: 'wrap',
           justifyContent: 'flex-end',
           gap: 0.25,
           px: 0.5,
@@ -289,8 +291,8 @@ function BookCard({
               sx={{
                 bgcolor: 'transparent',
                 color: 'text.secondary',
-                width: 44,
-                height: 44,
+                width: { xs: 38, sm: 44 },
+                height: { xs: 38, sm: 44 },
                 '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: '#fff' },
               }}
             >
@@ -309,8 +311,8 @@ function BookCard({
             sx={{
               bgcolor: 'transparent',
               color: bookmarked ? 'primary.main' : 'text.secondary',
-              width: 44,
-              height: 44,
+              width: { xs: 38, sm: 44 },
+              height: { xs: 38, sm: 44 },
               '&:hover': { bgcolor: 'action.hover' },
             }}
           >
@@ -319,6 +321,25 @@ function BookCard({
             ) : (
               <BookmarkBorderIcon sx={{ fontSize: 18 }} />
             )}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="下載原檔" placement="left">
+          <IconButton
+            size="small"
+            aria-label={`下載 ${book.title}`}
+            component="a"
+            href={`/api/books/${book.id}/file?download=1`}
+            download={book.title}
+            onClick={(e) => e.stopPropagation()}
+            sx={{
+              bgcolor: 'transparent',
+              color: 'text.secondary',
+              width: { xs: 38, sm: 44 },
+              height: { xs: 38, sm: 44 },
+              '&:hover': { bgcolor: 'action.hover' },
+            }}
+          >
+            <DownloadIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
         {canDelete && (
@@ -333,8 +354,8 @@ function BookCard({
               sx={{
                 bgcolor: 'transparent',
                 color: 'text.secondary',
-                width: 44,
-                height: 44,
+                width: { xs: 38, sm: 44 },
+                height: { xs: 38, sm: 44 },
                 '&:hover': { bgcolor: 'rgba(200,0,0,0.7)', color: '#fff' },
               }}
             >

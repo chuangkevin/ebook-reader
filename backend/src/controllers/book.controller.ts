@@ -116,6 +116,9 @@ class BookController {
         return;
       }
 
+      // ?download=1 時改為附件下載（觸發瀏覽器存檔），預設 inline 供閱讀器使用
+      const disposition = req.query.download === '1' ? 'attachment' : 'inline';
+
       // TXT 檔案需偵測編碼並轉為 UTF-8
       if (book.format === 'txt') {
         const buf = fs.readFileSync(book.filePath);
@@ -128,7 +131,7 @@ class BookController {
           text = iconv.decode(buf, encoding);
         }
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(book.title)}.txt"`);
+        res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(book.title)}.txt"`);
         res.send(text);
         return;
       }
@@ -138,7 +141,7 @@ class BookController {
         pdf: 'application/pdf',
       };
       res.setHeader('Content-Type', contentTypes[book.format] || 'application/octet-stream');
-      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(book.title)}.${book.format}"`);
+      res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(book.title)}.${book.format}"`);
       res.sendFile(path.resolve(book.filePath));
     } catch (error) {
       logger.error('Failed to serve book file:', error);
