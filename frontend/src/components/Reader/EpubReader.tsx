@@ -9,6 +9,7 @@ import {
 import './EpubReader.css'
 import { convertDoc } from '../../utils/opencc'
 import { measureViewportHingeGap } from '../../utils/viewportSegments'
+import { READER_FONT_FAMILY } from '../../utils/readerFont'
 // @ts-ignore
 import { SectionProgress } from '../../lib/foliate-js/progress.js'
 
@@ -72,8 +73,8 @@ function injectStyles(doc: Document, writingMode: string, fontSize: number, them
   const allElements = 'html, body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary, article, section, pre, code, figure'
   const bodyElements = 'p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary, article, section, pre, code, figure'
   style.textContent = `
-    html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; background-color: ${bg} !important; -webkit-text-size-adjust: none !important; text-size-adjust: none !important; }
-    ${bodyElements} { font-size: ${fontSize}px !important; }
+    html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; font-family: ${READER_FONT_FAMILY} !important; background-color: ${bg} !important; -webkit-text-size-adjust: none !important; text-size-adjust: none !important; }
+    ${bodyElements} { font-size: ${fontSize}px !important; font-family: ${READER_FONT_FAMILY} !important; }
     ${allElements} { color: ${fg} !important; }
     ::selection { background: #98432e; color: #fffdf7; }
     html { color-scheme: ${theme === "dark" ? "dark" : "light"}; scrollbar-color: ${fg} ${bg}; }
@@ -180,8 +181,8 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         const wm = writingModeRef.current
         const allElements = 'html, body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary, article, section, pre, code, figure'
         const css = `
-          html, body { writing-mode: ${wm} !important; -webkit-writing-mode: ${wm} !important; font-size: ${fontSize}px !important; background-color: ${bg} !important; -webkit-text-size-adjust: none !important; text-size-adjust: none !important; }
-          ${allElements} { font-size: ${fontSize}px !important; color: ${fg} !important; }
+          html, body { writing-mode: ${wm} !important; -webkit-writing-mode: ${wm} !important; font-size: ${fontSize}px !important; font-family: ${READER_FONT_FAMILY} !important; background-color: ${bg} !important; -webkit-text-size-adjust: none !important; text-size-adjust: none !important; }
+          ${allElements} { font-size: ${fontSize}px !important; font-family: ${READER_FONT_FAMILY} !important; color: ${fg} !important; }
         `
         // Use paginator.setStyles() which properly re-layouts via view.expand()
         paginator.setStyles?.(css)

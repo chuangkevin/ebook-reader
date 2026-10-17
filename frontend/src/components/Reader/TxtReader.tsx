@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import './EpubReader.css'
+import { READER_FONT_FAMILY } from '../../utils/readerFont'
 
 export interface TxtReaderHandle {
   next: () => Promise<void>
@@ -205,6 +206,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
               ? 'max(36px, calc(env(viewport-segment-left 1 0, 50vw) - env(viewport-segment-width 0 0, 50vw)))'
               : undefined,
             columnFill: 'auto',
+            fontFamily: READER_FONT_FAMILY,
             fontSize: `${fontSize}px`,
             lineHeight: 1.8,
             padding: '1rem',
