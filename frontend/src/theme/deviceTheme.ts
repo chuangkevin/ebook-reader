@@ -27,10 +27,10 @@ const resolve = (value: Appearance) =>
 function apply(mode: 'light' | 'dark') {
   document.documentElement.dataset.theme = mode
   document.documentElement.style.colorScheme = mode
-  document.documentElement.style.backgroundColor = mode === 'dark' ? '#181a19' : '#f5f2eb'
+  document.documentElement.style.backgroundColor = mode === 'dark' ? '#181a19' : '#ffffff'
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', mode === 'dark' ? '#181a19' : '#f5f2eb')
+    ?.setAttribute('content', mode === 'dark' ? '#181a19' : '#ffffff')
 }
 
 interface DeviceTheme {

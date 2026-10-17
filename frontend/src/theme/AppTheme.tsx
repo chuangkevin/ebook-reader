@@ -15,8 +15,8 @@ export default function AppTheme({ children }: { children: ReactNode }) {
             contrastText: mode === 'dark' ? '#211510' : '#fffaf5',
           },
           background: {
-            default: mode === 'dark' ? '#181a19' : '#f5f2eb',
-            paper: mode === 'dark' ? '#222522' : '#fffdf7',
+            default: mode === 'dark' ? '#181a19' : '#ffffff',
+            paper: mode === 'dark' ? '#222522' : '#ffffff',
           },
           text: {
             primary: mode === 'dark' ? '#f0eee7' : '#252c28',

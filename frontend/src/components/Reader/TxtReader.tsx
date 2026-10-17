@@ -171,7 +171,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
     const onPrev = () => scrollBackward()
 
     return (
-      <div className="epub-reader-root" style={{ background: theme === 'dark' ? '#181a19' : theme === 'sepia' ? '#f5ecd7' : '#fffdf7', color: theme === 'dark' ? '#f0eee7' : '#252c28' }}>
+      <div className="epub-reader-root" style={{ background: theme === 'dark' ? '#181a19' : theme === 'sepia' ? '#f5ecd7' : '#ffffff', color: theme === 'dark' ? '#f0eee7' : '#252c28' }}>
         {/* Tap zones */}
         {tapZoneLayout === 'default' ? (
           <>

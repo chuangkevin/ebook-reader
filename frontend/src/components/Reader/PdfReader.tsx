@@ -137,7 +137,7 @@ const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
 
     return (
       <div ref={containerRef} className="epub-reader-root" style={{
-        background: theme === 'dark' ? '#181a19' : '#e0e1d9',
+        background: theme === 'dark' ? '#181a19' : '#ffffff',
         '--reader-spread-gap': `${spreadGap}px`,
       } as React.CSSProperties}>
         {/* Tap zones */}

@@ -440,7 +440,6 @@ export default function ReaderPage() {
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}
             pageLayout={pageLayout}
-            spannedViewport={Boolean(viewportSegments)}
             fontSize={settings.fontSize}
             gap={settings.gap}
             theme={readingTheme}
