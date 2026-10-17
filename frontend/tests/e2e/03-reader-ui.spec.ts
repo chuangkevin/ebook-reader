@@ -106,7 +106,7 @@ test.describe('閱讀設定抽屜', () => {
     await expect.poll(() => page.evaluate((id) => localStorage.getItem(`readflix.reader.pageLayout.${id}`), testUser.id)).toBe('spread')
     await page.getByRole('button', { name: '關閉閱讀設定' }).click()
     await expect.poll(() => page.locator('foliate-paginator').getAttribute('max-column-count')).toBe('2')
-    await expect.poll(async () => Number.parseFloat((await page.locator('foliate-paginator').getAttribute('gap')) ?? '0')).toBeLessThan(5)
+    await expect.poll(async () => Number.parseFloat((await page.locator('foliate-paginator').getAttribute('gap')) ?? '0')).toBeGreaterThan(5)
     await page.waitForTimeout(300)
   })
 

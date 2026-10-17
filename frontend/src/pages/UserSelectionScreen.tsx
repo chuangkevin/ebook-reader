@@ -24,6 +24,7 @@ import { api } from '../services/api.service'
 import { useUserStore } from '../stores/userStore'
 import ThemeSwitch from '../components/ThemeSwitch'
 import { routePath, safeReturnTo } from '../utils/navigation'
+import { READER_FONT_FAMILY } from '../utils/readerFont'
 import type { User } from '../types/index'
 
 export default function UserSelectionScreen() {
@@ -120,7 +121,7 @@ export default function UserSelectionScreen() {
       >
         <Typography
           sx={{
-            fontFamily: 'Baskerville, serif',
+            fontFamily: READER_FONT_FAMILY,
             fontSize: 28,
             fontWeight: 700,
             letterSpacing: '-1px',

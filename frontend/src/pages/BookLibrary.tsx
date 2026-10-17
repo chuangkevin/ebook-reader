@@ -42,6 +42,7 @@ import { useUserStore } from '../stores/userStore'
 import { useBookStore } from '../stores/bookStore'
 import { api } from '../services/api.service'
 import ThemeSwitch from '../components/ThemeSwitch'
+import { READER_FONT_FAMILY } from '../utils/readerFont'
 import { clearRecovery, waitForProgress } from '../utils/readingProgress'
 import { libraryReturn, routePath } from '../utils/navigation'
 import type { Book } from '../types/index'
@@ -229,7 +230,7 @@ function BookCard({
               variant="h2"
               sx={{
                 color: '#fffaf0',
-                fontFamily: '"Songti TC", serif',
+                fontFamily: READER_FONT_FAMILY,
                 fontWeight: 600,
                 fontSize: compact ? 22 : { xs: 26, sm: 32 },
                 writingMode: /[\u3400-\u9fff]/.test(book.title) ? 'vertical-rl' : 'horizontal-tb',
@@ -734,7 +735,7 @@ export default function BookLibrary() {
             to="/library"
             sx={{
               flexGrow: 1,
-              fontFamily: 'Baskerville, serif',
+              fontFamily: READER_FONT_FAMILY,
               fontSize: 28,
               fontWeight: 700,
               textDecoration: 'none',

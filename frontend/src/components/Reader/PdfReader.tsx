@@ -3,7 +3,7 @@ import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 import './EpubReader.css'
-import { measureViewportHingeGap } from '../../utils/viewportSegments'
+import { MIN_SPREAD_GUTTER, measureViewportHingeGap } from '../../utils/viewportSegments'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -45,7 +45,7 @@ const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
     const [currentPage, setCurrentPage] = useState<number>(() => parsePageFromProgress(initialProgress))
     const [containerWidth, setContainerWidth] = useState<number>(0)
     const [containerHeight, setContainerHeight] = useState<number>(0)
-    const [hingeGap, setHingeGap] = useState(36)
+    const [hingeGap, setHingeGap] = useState(MIN_SPREAD_GUTTER)
     const pagesPerSpread = pageLayout === 'spread' ? 2 : 1
     const firstPage = pagesPerSpread === 2 && currentPage % 2 === 0 ? currentPage - 1 : currentPage
 

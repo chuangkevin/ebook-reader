@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { createTheme, CssBaseline, ThemeProvider } from '@mui/material'
 import { useDeviceTheme } from './deviceTheme'
+import { READER_FONT_FAMILY } from '../utils/readerFont'
 
 export default function AppTheme({ children }: { children: ReactNode }) {
   const mode = useDeviceTheme((s) => s.mode)
@@ -26,17 +27,17 @@ export default function AppTheme({ children }: { children: ReactNode }) {
         },
         shape: { borderRadius: 8 },
         typography: {
-          fontFamily: '"PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif',
+          fontFamily: READER_FONT_FAMILY,
           h1: {
-            fontFamily: '"Iowan Old Style", "Baskerville", "Songti TC", serif',
+            fontFamily: READER_FONT_FAMILY,
             fontWeight: 600,
-            letterSpacing: '-0.045em',
+            letterSpacing: '-0.02em',
           },
           h2: {
-            fontFamily: '"Iowan Old Style", "Baskerville", "Songti TC", serif',
+            fontFamily: READER_FONT_FAMILY,
             fontWeight: 600,
           },
-          h4: { fontFamily: '"Iowan Old Style", "Songti TC", serif', fontWeight: 600 },
+          h4: { fontFamily: READER_FONT_FAMILY, fontWeight: 600 },
           button: { textTransform: 'none', fontWeight: 600 },
           body1: { lineHeight: 1.7 },
         },

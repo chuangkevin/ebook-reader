@@ -5,7 +5,7 @@ import path from 'path'
 import { tmpdir } from 'os'
 import { unlinkSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
-import { getReaderPaneBounds, resolveHorizontalViewportSegments } from '../../src/utils/viewportSegments'
+import { MIN_SPREAD_GUTTER, getReaderPaneBounds, resolveHorizontalViewportSegments, spreadGutterPx } from '../../src/utils/viewportSegments'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -23,6 +23,12 @@ test('Surface Duo geometry selects one left pane or the full spread', () => {
   expect(segments?.hingeGap).toBe(40)
   expect(getReaderPaneBounds('single', segments)).toEqual({ left: 0, width: 760 })
   expect(getReaderPaneBounds('spread', segments)).toBeNull()
+})
+
+test('spread gutter keeps a minimum centre gap even without hinge data', () => {
+  expect(spreadGutterPx(0, 680, 0.06)).toBe(MIN_SPREAD_GUTTER)
+  expect(spreadGutterPx(120, 680, 0.06)).toBe(120)
+  expect(spreadGutterPx(0, 2000, 0.06)).toBe(120)
 })
 
 function createMinimalPdf(): string {

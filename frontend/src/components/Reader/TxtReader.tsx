@@ -8,6 +8,7 @@ import {
 } from 'react'
 import './EpubReader.css'
 import { READER_FONT_FAMILY } from '../../utils/readerFont'
+import { MIN_SPREAD_GUTTER } from '../../utils/viewportSegments'
 
 export interface TxtReaderHandle {
   next: () => Promise<void>
@@ -203,7 +204,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
             writingMode,
             columnCount: pageLayout === 'spread' ? 2 : 1,
             columnGap: pageLayout === 'spread'
-              ? 'max(36px, calc(env(viewport-segment-left 1 0, 50vw) - env(viewport-segment-width 0 0, 50vw)))'
+              ? `max(${MIN_SPREAD_GUTTER}px, 8%)`
               : undefined,
             columnFill: 'auto',
             fontFamily: READER_FONT_FAMILY,

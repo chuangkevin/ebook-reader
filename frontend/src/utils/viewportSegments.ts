@@ -1,4 +1,9 @@
-const HINGE_GAP_PROBE = 'max(36px, calc(env(viewport-segment-left 1 0, 50vw) - env(viewport-segment-width 0 0, 50vw)))'
+const HINGE_GAP_PROBE = 'max(80px, calc(env(viewport-segment-left 1 0, 50vw) - env(viewport-segment-width 0 0, 50vw)))'
+
+// Minimum blank space reserved at the centre of a two-page spread so text never
+// runs into the physical hinge of a folding device. Applied even when the
+// browser does not expose `viewport-segment-*` values.
+export const MIN_SPREAD_GUTTER = 80
 
 export interface HorizontalViewportSegments {
   first: { left: number; width: number; top: number; height: number }
@@ -35,6 +40,12 @@ export function resolveHorizontalViewportSegments(
   }
 }
 
+// Central gutter for a two-page spread: the detected hinge when available,
+// otherwise the reader's requested margin, never less than MIN_SPREAD_GUTTER.
+export function spreadGutterPx(hingeGap: number, pageFlowSize: number, gapFraction: number): number {
+  return Math.max(hingeGap, pageFlowSize * gapFraction, MIN_SPREAD_GUTTER)
+}
+
 function readViewportSegment(column: number, row: number) {
   if (typeof document === 'undefined') return null
   const probe = document.createElement('div')
@@ -53,12 +64,12 @@ export function measureHorizontalViewportSegments(): HorizontalViewportSegments 
 
 export function measureViewportHingeGap(): number {
   const segments = measureHorizontalViewportSegments()
-  if (segments) return segments.hingeGap
-  if (typeof document === 'undefined') return 36
+  if (segments) return Math.max(MIN_SPREAD_GUTTER, segments.hingeGap)
+  if (typeof document === 'undefined') return MIN_SPREAD_GUTTER
   const probe = document.createElement('div')
   probe.style.cssText = `position:fixed;visibility:hidden;pointer-events:none;width:${HINGE_GAP_PROBE};height:0;inset:0 auto auto 0`
   document.body.appendChild(probe)
   const width = Number.parseFloat(getComputedStyle(probe).width)
   probe.remove()
-  return Number.isFinite(width) ? width : 36
+  return Number.isFinite(width) ? width : MIN_SPREAD_GUTTER
 }

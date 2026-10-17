@@ -8,7 +8,7 @@ import {
 
 import './EpubReader.css'
 import { convertDoc } from '../../utils/opencc'
-import { measureViewportHingeGap } from '../../utils/viewportSegments'
+import { measureViewportHingeGap, spreadGutterPx } from '../../utils/viewportSegments'
 import { READER_FONT_FAMILY } from '../../utils/readerFont'
 // @ts-ignore
 import { SectionProgress } from '../../lib/foliate-js/progress.js'
@@ -113,8 +113,8 @@ function applyPageLayout(
   if (pageLayout === 'spread') {
     const flowSize = writingMode === 'vertical-rl' ? paginator.clientHeight : paginator.clientWidth
     const pageFlowSize = writingMode === 'vertical-rl' ? flowSize : flowSize / 2
-    const hingeGap = spannedViewport ? measureViewportHingeGap() : 0
-    const gapSize = Math.max(hingeGap, pageFlowSize * gap)
+    const hingeGap = measureViewportHingeGap()
+    const gapSize = spreadGutterPx(hingeGap, pageFlowSize, gap)
     paginator.setAttribute('gap', `${flowSize > 0 ? gapSize / flowSize * 100 : gap * 100}%`)
   } else {
     paginator.setAttribute('gap', `${Math.round(gap * 100)}%`)
