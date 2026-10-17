@@ -94,30 +94,42 @@ function applyPageLayout(
   writingMode: 'vertical-rl' | 'horizontal-tb',
   render = false,
 ) {
-  paginator.setAttribute('max-column-count', pageLayout === 'spread' ? '2' : '1')
+  const horizontal = writingMode !== 'vertical-rl'
+  // foliate-js renders a "two-column" spread as stacked blocks in vertical
+  // writing, so vertical stays single-page; the two-page toggle applies to
+  // horizontal reading only.
+  const spread = pageLayout === 'spread' && horizontal
+  paginator.setAttribute('max-column-count', spread ? '2' : '1')
   // Keep the top/bottom page margin tight; foliate-js defaults to 48px which
   // looks oversized for vertical writing on tall phone panes.
-  paginator.setAttribute('margin', '24')
+  const MARGIN = 24
+  paginator.setAttribute('margin', `${MARGIN}px`)
   const top = paginator.shadowRoot?.getElementById('top') as HTMLElement | null
-  top?.style.setProperty('--_max-column-count-portrait', pageLayout === 'spread' ? '2' : '1')
-  // Bound the page to the real pane size. foliate-js defaults to a 720px inline
-  // limit, which in vertical writing (= vertical line length) leaves large blank
-  // bands when the pane is taller than 720px.
-  const horizontal = writingMode !== 'vertical-rl'
-  const perPage = pageLayout === 'spread' ? 2 : 1
-  const inlineSize = horizontal ? paginator.clientWidth / perPage : paginator.clientHeight
-  const blockSize = horizontal ? paginator.clientHeight : paginator.clientWidth / perPage
-  if (inlineSize > 0) paginator.setAttribute('max-inline-size', `${Math.round(inlineSize)}`)
-  if (blockSize > 0) paginator.setAttribute('max-block-size', `${Math.round(blockSize)}`)
-  if (pageLayout === 'spread') {
-    const flowSize = writingMode === 'vertical-rl' ? paginator.clientHeight : paginator.clientWidth
-    const pageFlowSize = writingMode === 'vertical-rl' ? flowSize : flowSize / 2
-    const hingeGap = measureViewportHingeGap()
-    const gapSize = spreadGutterPx(hingeGap, pageFlowSize, gap)
-    paginator.setAttribute('gap', `${flowSize > 0 ? gapSize / flowSize * 100 : gap * 100}%`)
-  } else {
-    paginator.setAttribute('gap', `${Math.round(gap * 100)}%`)
-  }
+  top?.style.setProperty('--_max-column-count-portrait', spread ? '2' : '1')
+
+  const perPage = spread ? 2 : 1
+  const pageWidth = paginator.clientWidth
+  const pageHeight = paginator.clientHeight
+  // foliate-js sizes the gap from the text-flow extent (height in vertical).
+  const flowSize = horizontal ? pageWidth : pageHeight
+  const pageFlowSize = horizontal ? pageWidth / perPage : pageHeight
+
+  const gapSize = spread
+    ? spreadGutterPx(measureViewportHingeGap(), pageFlowSize, gap)
+    : Math.max(pageFlowSize * gap, MARGIN * 2)
+  paginator.setAttribute('gap', `${flowSize > 0 ? (gapSize / flowSize) * 100 : gap * 100}%`)
+
+  // foliate's grid needs the page extent to be SMALLER than the container,
+  // otherwise the tracks overflow and text is pushed against one edge. Reserve
+  // the centre gap and the flow-axis margin before sizing. foliate multiplies
+  // the inline extent by the column count for horizontal writing, but not the
+  // block extent for vertical writing.
+  const widthExtent = Math.max(0, pageWidth - gapSize)
+  const heightExtent = Math.max(0, pageHeight - MARGIN * 2)
+  const inlineSize = horizontal ? widthExtent / perPage : heightExtent / perPage
+  const blockSize = horizontal ? heightExtent : widthExtent
+  if (inlineSize > 0) paginator.setAttribute('max-inline-size', `${Math.round(inlineSize)}px`)
+  if (blockSize > 0) paginator.setAttribute('max-block-size', `${Math.round(blockSize)}px`)
   if (render && paginator.getContents?.().some(({ doc }) => Boolean(doc))) {
     paginator.render?.()
   }

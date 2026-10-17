@@ -10,6 +10,7 @@ import { MIN_SPREAD_GUTTER, getReaderPaneBounds, resolveHorizontalViewportSegmen
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const TXT_PATH = path.resolve(__dirname, '../fixtures/minimal.txt')
+const EPUB_PATH = path.resolve(__dirname, '../fixtures/minimal.epub')
 
 let testUser: Awaited<ReturnType<typeof createUser>> | undefined
 let testBook: Awaited<ReturnType<typeof uploadBook>> | undefined
@@ -98,4 +99,24 @@ test('TXT 雙頁模式以兩欄排版', async ({ page }) => {
   const content = page.getByTestId('txt-reader-content')
   await expect(content).toBeVisible()
   await expect.poll(() => content.evaluate((element) => getComputedStyle(element).columnCount)).toBe('2')
+})
+
+test('直排在小螢幕維持單欄且左右留白對稱', async ({ page }) => {
+  await page.setViewportSize({ width: 950, height: 760 })
+  await openBook(page, EPUB_PATH)
+  await page.waitForTimeout(1500)
+  const layout = await page.evaluate(() => {
+    const pag = document.querySelector('foliate-paginator') as HTMLElement & { shadowRoot: ShadowRoot | null }
+    const pane = pag.getBoundingClientRect()
+    const container = pag.shadowRoot?.getElementById('container')?.getBoundingClientRect()
+    return {
+      columns: pag.getAttribute('max-column-count'),
+      paneWidth: pane.width,
+      left: container ? container.left - pane.left : 0,
+      right: container ? pane.right - container.right : 0,
+    }
+  })
+  expect(layout.columns).toBe('1')
+  expect(Math.abs(layout.left - layout.right)).toBeLessThan(8)
+  expect(layout.right).toBeGreaterThan(4)
 })
