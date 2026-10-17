@@ -11,7 +11,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close'
 import ThemeSwitch from '../ThemeSwitch'
 import { useDeviceTheme } from '../../theme/deviceTheme'
-import { useSettingsStore } from '../../stores/settingsStore'
+import { saveReaderPageLayout, useSettingsStore } from '../../stores/settingsStore'
 import { api } from '../../services/api.service'
 import type { ReaderSettings as ReaderSettingsType } from '../../types/index'
 
@@ -74,6 +74,12 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
     scheduleSave(updated)
   }
 
+  function handlePageLayout(_: React.MouseEvent, value: ReaderSettingsType['pageLayout'] | null) {
+    if (!value) return
+    setSettings({ pageLayout: value })
+    saveReaderPageLayout(userId, value)
+  }
+
   function handleFontSize(_: Event, value: number | number[]) {
     const fontSize = value as number
     const updated = { ...settings, fontSize }
@@ -132,6 +138,26 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
       <Box sx={{ mb: 3 }}>
         <ThemeSwitch expanded />
       </Box>
+      {/* 排版模式 */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+          顯示頁數
+        </Typography>
+        <ToggleButtonGroup
+          aria-label="顯示頁數"
+          value={settings.pageLayout}
+          exclusive
+          onChange={handlePageLayout}
+          size="small"
+        >
+          <ToggleButton value="single">單頁</ToggleButton>
+          <ToggleButton value="spread">雙頁</ToggleButton>
+        </ToggleButtonGroup>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
+          窄螢幕會自動以單頁顯示。
+        </Typography>
+      </Box>
+
       {/* 排版模式 */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>

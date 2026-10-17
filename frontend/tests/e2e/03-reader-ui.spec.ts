@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename)
  * 閱讀器 UI 整合測試（真實後端 + 真實 EPUB，無 mock）
  */
 
-const TEST_EPUB = path.resolve(__dirname, '../../../ebook/哈利波特一_神秘的魔法石.epub')
+const TEST_EPUB = path.resolve(__dirname, '../fixtures/minimal.epub')
 
 let testUser: any
 let testBook: any
@@ -30,8 +30,8 @@ async function openReader(page: any) {
   await page.waitForLoadState('networkidle')
   await page.getByText(testUser.name).click()
   await page.waitForURL('/library')
-  await page.getByText(testBook.title).click()
-  await page.waitForURL(`/reader/${testBook.id}`)
+  await page.getByRole('link', { name: `閱讀 ${testBook.title}` }).click()
+  await page.waitForURL((url: URL) => url.pathname === `/reader/${testBook.id}`)
   await page.waitForSelector('foliate-paginator', { timeout: 10000 })
   await page.waitForTimeout(2000)
 }
@@ -70,7 +70,7 @@ test.describe('閱讀設定抽屜', () => {
     await page.waitForTimeout(300)
     await expect(page.getByText('排版模式')).toBeVisible()
     await expect(page.getByText('字體大小')).toBeVisible()
-    await expect(page.getByText('主題')).toBeVisible()
+    await expect(page.getByText('畫面外觀')).toBeVisible()
     await page.screenshot({ path: 'test-results/03-settings-drawer.png' })
   })
 
@@ -94,6 +94,25 @@ test.describe('閱讀設定抽屜', () => {
     await page.waitForTimeout(2000)
     await expect(page.locator('foliate-paginator')).toBeAttached()
     await page.screenshot({ path: 'test-results/03-vert-mode.png' })
+  })
+
+  test('可以切換雙頁，並按讀者保存設定', async ({ page }) => {
+    await page.setViewportSize({ width: 1365, height: 900 })
+    await openReader(page)
+    await page.locator('svg[data-testid="SettingsIcon"]').locator('..').click()
+    await page.getByRole('button', { name: '雙頁' }).click()
+    await expect.poll(() => page.evaluate((id) => localStorage.getItem(`readflix.reader.pageLayout.${id}`), testUser.id)).toBe('spread')
+    await page.getByRole('button', { name: '關閉閱讀設定' }).click()
+    await expect.poll(() => page.locator('foliate-paginator').getAttribute('max-column-count')).toBe('2')
+    await page.waitForTimeout(300)
+  })
+
+  test('窄畫面保留閱讀空間並使用單欄', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.addInitScript((id) => localStorage.setItem(`readflix.reader.pageLayout.${id}`, 'spread'), testUser.id)
+    await openReader(page)
+    await expect(page.locator('foliate-paginator')).toHaveAttribute('max-column-count', '1')
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
 })
 

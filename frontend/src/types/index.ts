@@ -24,6 +24,7 @@ export interface ReadingProgress {
 
 export interface ReaderSettings {
   writingMode: 'vertical-rl' | 'horizontal-tb'
+  pageLayout: 'single' | 'spread'
   fontSize: number  // px, default 18
   gap: number  // fraction of viewport, default 0.06 (6%)
   theme: 'light' | 'sepia' | 'dark'

@@ -78,6 +78,7 @@ docker compose -f docker-compose.prod.yml up -d
 - 頁面兩側留適當邊距
 
 ### 閱讀設定（可即時套用，不需重新開書）
+- 顯示頁數：單頁／雙頁；寬畫面可左右並排閱讀，窄畫面自動使用單頁
 - 排版切換：橫排 ↔ 直排
 - 字體大小調整
 - 行距調整
@@ -99,6 +100,7 @@ docker compose -f docker-compose.prod.yml up -d
 | 最高   | iPhone（iOS Safari）|
 | 高     | Android（Chrome）|
 | 高     | Boox Go Color 7（Android WebView）|
+| 高     | Surface Duo（Android Chrome，雙螢幕閱讀）|
 | 中     | 桌面瀏覽器（Chrome、Firefox、Safari）|
 
 ---

@@ -21,6 +21,7 @@ interface TxtReaderProps {
   userId: string
   initialProgress?: string
   writingMode: 'vertical-rl' | 'horizontal-tb'
+  pageLayout: 'single' | 'spread'
   fontSize: number
   tapZoneLayout?: 'default' | 'bottom-next' | 'bottom-prev'
   onCenterTap?: () => void
@@ -36,7 +37,7 @@ function parseScrollFraction(progress?: string): number {
 }
 
 const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
-  ({ bookId, theme = 'light', initialProgress, writingMode, fontSize, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
+  ({ bookId, theme = 'light', initialProgress, writingMode, pageLayout, fontSize, tapZoneLayout = 'default', onCenterTap, onProgressChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const [text, setText] = useState<string>('')
     const [loading, setLoading] = useState(true)
@@ -132,11 +133,11 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
       const isVertical = writingMode === 'vertical-rl'
       if (isVertical) {
         // vertical-rl: positive scrollLeft moves left (which is "back"), negative is "forward"
-        el.scrollLeft -= el.clientWidth * 0.8
+      el.scrollLeft -= el.clientWidth * (pageLayout === 'spread' ? 1 : 0.8)
       } else {
-        el.scrollTop += el.clientHeight * 0.8
+        el.scrollTop += el.clientHeight * (pageLayout === 'spread' ? 1 : 0.8)
       }
-    }, [writingMode])
+    }, [writingMode, pageLayout])
 
     // Scroll by one "page" backward
     const scrollBackward = useCallback(() => {
@@ -144,11 +145,11 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
       if (!el) return
       const isVertical = writingMode === 'vertical-rl'
       if (isVertical) {
-        el.scrollLeft += el.clientWidth * 0.8
+        el.scrollLeft += el.clientWidth * (pageLayout === 'spread' ? 1 : 0.8)
       } else {
-        el.scrollTop -= el.clientHeight * 0.8
+        el.scrollTop -= el.clientHeight * (pageLayout === 'spread' ? 1 : 0.8)
       }
-    }, [writingMode])
+    }, [writingMode, pageLayout])
 
     useImperativeHandle(ref, () => ({
       next: async () => scrollForward(),
@@ -191,6 +192,7 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
         )}
 
         <div
+          data-testid="txt-reader-content"
           ref={containerRef}
           onScroll={handleScroll}
           style={{
@@ -198,6 +200,11 @@ const TxtReader = forwardRef<TxtReaderHandle, TxtReaderProps>(
             height: '100%',
             overflow: 'auto',
             writingMode,
+            columnCount: pageLayout === 'spread' ? 2 : 1,
+            columnGap: pageLayout === 'spread'
+              ? 'max(36px, calc(env(viewport-segment-left 1 0, 50vw) - env(viewport-segment-width 0 0, 50vw)))'
+              : undefined,
+            columnFill: 'auto',
             fontSize: `${fontSize}px`,
             lineHeight: 1.8,
             padding: '1rem',

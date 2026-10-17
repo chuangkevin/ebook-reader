@@ -24,7 +24,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useBookStore } from '../stores/bookStore'
 import { useUserStore } from '../stores/userStore'
-import { useSettingsStore } from '../stores/settingsStore'
+import { getReaderPageLayout, useSettingsStore } from '../stores/settingsStore'
 import { api, type PageBookmark } from '../services/api.service'
 import EpubReader, { type EpubReaderHandle } from '../components/Reader/EpubReader'
 import PdfReader, { type PdfReaderHandle } from '../components/Reader/PdfReader'
@@ -74,7 +74,17 @@ export default function ReaderPage() {
   const [pageBookmarks, setPageBookmarks] = useState<PageBookmark[]>([])
   const [snackMsg, setSnackMsg] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
+  const [isWideViewport, setIsWideViewport] = useState(() => window.matchMedia('(min-width: 768px)').matches)
   const currentProgressStringRef = useRef('')
+  const pageLayout = settings.pageLayout === 'spread' && isWideViewport ? 'spread' : 'single'
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 768px)')
+    const update = () => setIsWideViewport(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
 
   useSwipeNavigation(
     readerAreaRef,
@@ -99,7 +109,7 @@ export default function ReaderPage() {
         const position = recoverProgress(currentUser.id, bookId, saved)
         const { theme: _remoteTheme, ...layout } = remoteSettings
         void _remoteTheme
-        setSettings(layout)
+        setSettings({ ...layout, pageLayout: getReaderPageLayout(currentUser.id) })
         setCurrentBook({ ...book, progress: position })
         currentProgressStringRef.current = position ?? ''
         setProgressPercent(saved?.percentage ?? 0)
@@ -410,6 +420,7 @@ export default function ReaderPage() {
             userId={currentUser.id}
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}
+            pageLayout={pageLayout}
             fontSize={settings.fontSize}
             gap={settings.gap}
             theme={readingTheme}
@@ -432,6 +443,7 @@ export default function ReaderPage() {
             userId={currentUser.id}
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}
+            pageLayout={pageLayout}
             fontSize={settings.fontSize}
             tapZoneLayout={settings.tapZoneLayout}
             onCenterTap={() => {
@@ -450,6 +462,7 @@ export default function ReaderPage() {
             userId={currentUser.id}
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}
+            pageLayout={pageLayout}
             fontSize={settings.fontSize}
             tapZoneLayout={settings.tapZoneLayout}
             onCenterTap={() => {

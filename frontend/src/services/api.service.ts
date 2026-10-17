@@ -173,7 +173,7 @@ async function getSettings(userId: string): Promise<ReaderSettings> {
   return request<ReaderSettings>(`/users/${userId}/settings`)
 }
 
-async function updateSettings(userId: string, settings: Omit<ReaderSettings, 'theme'>): Promise<void> {
+async function updateSettings(userId: string, settings: Omit<ReaderSettings, 'theme' | 'pageLayout'>): Promise<void> {
   return request<void>(`/users/${userId}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
