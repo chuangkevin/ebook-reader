@@ -36,6 +36,7 @@ import ThemeSwitch from '../components/ThemeSwitch'
 import RouteState from '../components/RouteState'
 import { useDeviceTheme } from '../theme/deviceTheme'
 import { libraryReturn } from '../utils/navigation'
+import { getReaderPaneBounds, measureHorizontalViewportSegments } from '../utils/viewportSegments'
 import { recoverProgress, saveProgress, waitForProgress } from '../utils/readingProgress'
 import type { TocItem } from '../types'
 
@@ -75,15 +76,24 @@ export default function ReaderPage() {
   const [snackMsg, setSnackMsg] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
   const [isWideViewport, setIsWideViewport] = useState(() => window.matchMedia('(min-width: 768px)').matches)
+  const [viewportSegments, setViewportSegments] = useState(() => measureHorizontalViewportSegments())
   const currentProgressStringRef = useRef('')
   const pageLayout = settings.pageLayout === 'spread' && isWideViewport ? 'spread' : 'single'
+  const readerPaneBounds = getReaderPaneBounds(pageLayout, viewportSegments)
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 768px)')
-    const update = () => setIsWideViewport(query.matches)
+    const update = () => {
+      setIsWideViewport(query.matches)
+      setViewportSegments(measureHorizontalViewportSegments())
+    }
     update()
     query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
+    window.addEventListener('resize', update)
+    return () => {
+      query.removeEventListener('change', update)
+      window.removeEventListener('resize', update)
+    }
   }, [])
 
   useSwipeNavigation(
@@ -412,6 +422,15 @@ export default function ReaderPage() {
           )}
         </IconButton>
 
+        <Box
+          sx={{
+            position: 'absolute',
+            insetBlock: 0,
+            left: readerPaneBounds?.left ?? 0,
+            width: readerPaneBounds?.width ?? '100%',
+            overflow: 'hidden',
+          }}
+        >
         {format === 'epub' && (
           <EpubReader
             key={`${currentUser.id}/${bookId}`}
@@ -421,6 +440,7 @@ export default function ReaderPage() {
             initialProgress={currentBook.progress}
             writingMode={settings.writingMode}
             pageLayout={pageLayout}
+            spannedViewport={Boolean(viewportSegments)}
             fontSize={settings.fontSize}
             gap={settings.gap}
             theme={readingTheme}
@@ -471,6 +491,7 @@ export default function ReaderPage() {
             onProgressChange={handleProgressChange}
           />
         )}
+        </Box>
       </Box>
 
       {/* Page slider */}

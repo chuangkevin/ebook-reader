@@ -37,6 +37,7 @@ interface EpubReaderProps {
   initialProgress?: string
   writingMode: 'vertical-rl' | 'horizontal-tb'
   pageLayout: 'single' | 'spread'
+  spannedViewport?: boolean
   fontSize: number
   gap?: number
   theme?: 'light' | 'sepia' | 'dark'
@@ -91,14 +92,28 @@ function applyPageLayout(
   pageLayout: 'single' | 'spread',
   gap: number,
   writingMode: 'vertical-rl' | 'horizontal-tb',
+  spannedViewport = false,
   render = false,
 ) {
   paginator.setAttribute('max-column-count', pageLayout === 'spread' ? '2' : '1')
   const top = paginator.shadowRoot?.getElementById('top') as HTMLElement | null
   top?.style.setProperty('--_max-column-count-portrait', pageLayout === 'spread' ? '2' : '1')
+  if (spannedViewport) {
+    const pageInlineSize = writingMode === 'vertical-rl'
+      ? paginator.clientHeight
+      : pageLayout === 'spread' ? paginator.clientWidth / 2 : paginator.clientWidth
+    const pageBlockSize = writingMode === 'vertical-rl' ? paginator.clientWidth : paginator.clientHeight
+    if (pageInlineSize > 0) paginator.setAttribute('max-inline-size', `${Math.round(pageInlineSize)}`)
+    if (pageBlockSize > 0) paginator.setAttribute('max-block-size', `${Math.round(pageBlockSize)}`)
+  } else {
+    paginator.removeAttribute('max-inline-size')
+    paginator.removeAttribute('max-block-size')
+  }
   if (pageLayout === 'spread') {
     const flowSize = writingMode === 'vertical-rl' ? paginator.clientHeight : paginator.clientWidth
-    const gapSize = Math.max(measureViewportHingeGap(), flowSize * gap)
+    const pageFlowSize = writingMode === 'vertical-rl' ? flowSize : flowSize / 2
+    const hingeGap = spannedViewport ? measureViewportHingeGap() : 0
+    const gapSize = Math.max(hingeGap, pageFlowSize * gap)
     paginator.setAttribute('gap', `${flowSize > 0 ? gapSize / flowSize * 100 : gap * 100}%`)
   } else {
     paginator.setAttribute('gap', `${Math.round(gap * 100)}%`)
@@ -109,7 +124,7 @@ function applyPageLayout(
 }
 
 const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
-  ({ bookId, initialProgress, writingMode, pageLayout, fontSize, gap = 0.06, theme = 'light', tapZoneLayout = 'default', openccMode = 'none', onCenterTap, onProgressChange, onTocLoad }, ref) => {
+  ({ bookId, initialProgress, writingMode, pageLayout, spannedViewport = false, fontSize, gap = 0.06, theme = 'light', tapZoneLayout = 'default', openccMode = 'none', onCenterTap, onProgressChange, onTocLoad }, ref) => {
     const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
     const paginatorRef = useRef<HTMLElement>(null)
     const bookRef = useRef<any>(null)
@@ -141,20 +156,20 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         initializedLayoutRef.current = true
         return
       }
-      applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, true)
-    }, [pageLayout, gap, loadState])
+      applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, spannedViewport, true)
+    }, [pageLayout, gap, loadState, spannedViewport])
 
     useEffect(() => {
       if (pageLayout !== 'spread' || loadState !== 'ready') return
       const reflowSpread = () => {
         const paginator = paginatorRef.current as any
         if (paginator && !modeSwitchingRef.current) {
-          applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, true)
+          applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, spannedViewport, true)
         }
       }
       window.addEventListener('resize', reflowSpread)
       return () => window.removeEventListener('resize', reflowSpread)
-    }, [pageLayout, gap, loadState])
+    }, [pageLayout, gap, loadState, spannedViewport])
 
     // Re-inject CSS when fontSize/theme/openccMode changes (no position reset needed)
     useEffect(() => {
@@ -201,7 +216,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       modeSwitchingRef.current = true
       ;(async () => {
         try {
-          applyPageLayout(paginator, pageLayout, gap, writingMode, false)
+          applyPageLayout(paginator, pageLayout, gap, writingMode, spannedViewport, false)
           paginator.open(book)
           // Navigate to an adjacent section first. This changes paginator's internal #index so
           // the subsequent goTo(pos.index) uses the "different section" code path, which reloads
@@ -264,7 +279,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         setTimeout(() => { modeSwitchingRef.current = false }, 500)
       })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [writingMode, pageLayout, gap])
+    }, [writingMode, pageLayout, gap, spannedViewport])
 
     useEffect(() => {
       const paginator = paginatorRef.current as any
@@ -355,7 +370,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           }
 
           paginator.setAttribute('flow', 'paginated')
-          applyPageLayout(paginator, pageLayout, gapRef.current, writingModeRef.current)
+          applyPageLayout(paginator, pageLayout, gapRef.current, writingModeRef.current, spannedViewport)
 
           paginator.open(book)
           await paginator.next() // render first page

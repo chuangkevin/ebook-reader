@@ -100,10 +100,13 @@ test.describe('閱讀設定抽屜', () => {
     await page.setViewportSize({ width: 1365, height: 900 })
     await openReader(page)
     await page.locator('svg[data-testid="SettingsIcon"]').locator('..').click()
+    await page.getByRole('button', { name: '橫排' }).click()
+    await page.waitForTimeout(2000)
     await page.getByRole('button', { name: '雙頁' }).click()
     await expect.poll(() => page.evaluate((id) => localStorage.getItem(`readflix.reader.pageLayout.${id}`), testUser.id)).toBe('spread')
     await page.getByRole('button', { name: '關閉閱讀設定' }).click()
     await expect.poll(() => page.locator('foliate-paginator').getAttribute('max-column-count')).toBe('2')
+    await expect.poll(async () => Number.parseFloat((await page.locator('foliate-paginator').getAttribute('gap')) ?? '0')).toBeLessThan(5)
     await page.waitForTimeout(300)
   })
 

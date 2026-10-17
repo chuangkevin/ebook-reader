@@ -5,6 +5,7 @@ import path from 'path'
 import { tmpdir } from 'os'
 import { unlinkSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
+import { getReaderPaneBounds, resolveHorizontalViewportSegments } from '../../src/utils/viewportSegments'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -13,6 +14,16 @@ const TXT_PATH = path.resolve(__dirname, '../fixtures/minimal.txt')
 let testUser: Awaited<ReturnType<typeof createUser>> | undefined
 let testBook: Awaited<ReturnType<typeof uploadBook>> | undefined
 let temporaryPdfPath: string | undefined
+
+test('Surface Duo geometry selects one left pane or the full spread', () => {
+  const segments = resolveHorizontalViewportSegments(
+    { left: 0, width: 760, top: 0, height: 800 },
+    { left: 800, width: 760, top: 0, height: 800 },
+  )
+  expect(segments?.hingeGap).toBe(40)
+  expect(getReaderPaneBounds('single', segments)).toEqual({ left: 0, width: 760 })
+  expect(getReaderPaneBounds('spread', segments)).toBeNull()
+})
 
 function createMinimalPdf(): string {
   const objects: string[] = []
