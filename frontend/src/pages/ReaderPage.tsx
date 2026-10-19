@@ -84,9 +84,9 @@ export default function ReaderPage() {
   // hinge-adjacent edge clear so text never crowds the fold.
   const hingeClearance = readerPaneBounds
     ? viewportSegments?.horizontal
-      ? { paddingRight: HINGE_CLEARANCE }
+      ? { paddingRight: `${HINGE_CLEARANCE}px` }
       : viewportSegments?.stacked
-        ? { paddingBottom: HINGE_CLEARANCE }
+        ? { paddingBottom: `${HINGE_CLEARANCE}px` }
         : {}
     : {}
 

@@ -121,6 +121,25 @@ test('TXT 雙頁模式以兩欄排版', async ({ page }) => {
   await expect.poll(() => content.evaluate((element) => getComputedStyle(element).columnCount)).toBe('2')
 })
 
+test('duoSim 模擬：展開橫向時閱讀區鎖在左螢幕並留轉軸淨空', async ({ page }) => {
+  await openBook(page, EPUB_PATH)
+  await page.addInitScript((id) => localStorage.setItem(`readflix.reader.pageLayout.${id}`, 'single'), testUser!.id)
+  await page.setViewportSize({ width: 1392, height: 900 })
+  await page.goto(`/reader/${testBook!.id}?duoSim=landscape-span`)
+  await page.waitForSelector('foliate-paginator')
+  await page.waitForTimeout(1500)
+  const geom = await page.evaluate(() => {
+    const pag = document.querySelector('foliate-paginator') as HTMLElement
+    const b = pag.getBoundingClientRect()
+    return { left: Math.round(b.left), right: Math.round(b.right), width: Math.round(b.width) }
+  })
+  // Duo 1 spanned: left screen is 0..672; the paginator keeps a 48px hinge
+  // clearance inside the pane, so it ends at 624.
+  expect(geom.left).toBe(0)
+  expect(Math.abs(geom.right - 624)).toBeLessThanOrEqual(2)
+  expect(Math.abs(geom.width - 624)).toBeLessThanOrEqual(2)
+})
+
 test('直排在小螢幕維持單欄且四邊邊距完整', async ({ page }) => {
   await openBook(page, EPUB_PATH)
   await page.setViewportSize({ width: 720, height: 1280 })

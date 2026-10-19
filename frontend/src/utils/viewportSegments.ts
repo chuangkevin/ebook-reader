@@ -87,6 +87,8 @@ function readViewportSegment(column: number, row: number) {
 }
 
 export function measureViewportSegments(): ViewportSegments {
+  const simulated = simulatedViewportSegments()
+  if (simulated) return simulated
   const first = readViewportSegment(0, 0)
   const second = readViewportSegment(1, 0)
   if (!first || !second) return { horizontal: null, stacked: null }
@@ -94,6 +96,28 @@ export function measureViewportSegments(): ViewportSegments {
     horizontal: resolveHorizontalViewportSegments(first, second),
     stacked: resolveStackedViewportSegments(first, second),
   }
+}
+
+// Duo simulator support: the local duo-simulator page loads the app in a
+// Duo-sized iframe and passes ?duoSim=<mode>. Report the simulated segments so
+// fold-aware layouts engage exactly like on a physical Surface Duo 1
+// (two 672px screens with a 48px hinge gap).
+function simulatedViewportSegments(): ViewportSegments | null {
+  if (typeof window === 'undefined') return null
+  const mode = new URLSearchParams(window.location.search).get('duoSim')
+  if (mode === 'landscape-span') {
+    const height = window.innerHeight
+    const first = { left: 0, width: 672, top: 0, height }
+    const second = { left: 720, width: 672, top: 0, height }
+    return { horizontal: resolveHorizontalViewportSegments(first, second), stacked: null }
+  }
+  if (mode === 'portrait-span') {
+    const width = window.innerWidth
+    const first = { left: 0, width, top: 0, height: 672 }
+    const second = { left: 0, width, top: 720, height: 672 }
+    return { horizontal: null, stacked: resolveStackedViewportSegments(first, second) }
+  }
+  return null
 }
 
 export function measureHorizontalViewportSegments(): HorizontalViewportSegments | null {
