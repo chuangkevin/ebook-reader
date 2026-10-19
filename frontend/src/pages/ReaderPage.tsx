@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   AppBar,
@@ -27,7 +27,10 @@ import { useUserStore } from '../stores/userStore'
 import { getReaderPageLayout, useSettingsStore } from '../stores/settingsStore'
 import { api, type PageBookmark } from '../services/api.service'
 import EpubReader, { type EpubReaderHandle } from '../components/Reader/EpubReader'
-import PdfReader, { type PdfReaderHandle } from '../components/Reader/PdfReader'
+import { type PdfReaderHandle } from '../components/Reader/PdfReader'
+
+// PDF engine (pdf.js) is heavy; load it only when a PDF is actually opened.
+const PdfReader = lazy(() => import('../components/Reader/PdfReader'))
 import TxtReader, { type TxtReaderHandle } from '../components/Reader/TxtReader'
 import ReaderSettings from '../components/Reader/ReaderSettings'
 import TocDrawer from '../components/Reader/TocDrawer'
@@ -465,6 +468,7 @@ export default function ReaderPage() {
         )}
 
         {format === 'pdf' && (
+          <Suspense fallback={<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }} />}>
           <PdfReader
             key={`${currentUser.id}/${bookId}`}
             ref={readerRef as React.Ref<PdfReaderHandle>}
@@ -481,6 +485,7 @@ export default function ReaderPage() {
             }}
             onProgressChange={handleProgressChange}
           />
+          </Suspense>
         )}
 
         {format === 'txt' && (

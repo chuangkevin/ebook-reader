@@ -1,8 +1,8 @@
 :root {
-  --canvas: #f5f2eb;
+  --canvas: #ffffff;
   --ink: #252c28;
   --muted: #62685e;
-  --line: #d4d5c9;
+  --line: #d9dcd8;
   --accent: #98432e;
   color-scheme: light;
   background: var(--canvas);
