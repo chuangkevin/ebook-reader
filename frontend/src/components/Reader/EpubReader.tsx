@@ -117,14 +117,16 @@ function applyPageLayout(
   const gapSize = spread
     ? spreadGutterPx(measureViewportHingeGap(), pageFlowSize, gap)
     : Math.max(pageFlowSize * gap, MARGIN * 2)
-  paginator.setAttribute('gap', `${flowSize > 0 ? (gapSize / flowSize) * 100 : gap * 100}%`)
+  const gapFraction = flowSize > 0 ? gapSize / flowSize : gap
+  paginator.setAttribute('gap', `${gapFraction * 100}%`)
 
-  // foliate's grid needs the page extent to be SMALLER than the container,
-  // otherwise the tracks overflow and text is pushed against one edge. Reserve
-  // the centre gap and the flow-axis margin before sizing. foliate multiplies
-  // the inline extent by the column count for horizontal writing, but not the
-  // block extent for vertical writing.
-  const widthExtent = Math.max(0, pageWidth - gapSize)
+  // foliate-js renders the actual gap as g/(1-g) of the flow size, and the
+  // grid leaves (pageWidth - maxW) / 2 of blank space on each side. Solve the
+  // page extent so every pane edge keeps at least MIN_SIDE_MARGIN; the centre
+  // gap and hinge clearance are handled separately.
+  const MIN_SIDE_MARGIN = 48
+  const gapPx = gapFraction < 1 ? gapSize / (1 - gapFraction) : gapSize
+  const widthExtent = Math.max(0, pageWidth - 2 * Math.max(MIN_SIDE_MARGIN, gapPx / 2))
   const heightExtent = Math.max(0, pageHeight - MARGIN * 2)
   const inlineSize = horizontal ? widthExtent / perPage : heightExtent / perPage
   const blockSize = horizontal ? heightExtent : widthExtent

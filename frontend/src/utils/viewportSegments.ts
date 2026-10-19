@@ -5,26 +5,43 @@ const HINGE_GAP_PROBE = 'max(80px, calc(env(viewport-segment-left 1 0, 50vw) - e
 // browser does not expose `viewport-segment-*` values.
 export const MIN_SPREAD_GUTTER = 80
 
-export interface HorizontalViewportSegments {
-  first: { left: number; width: number; top: number; height: number }
-  second: { left: number; width: number; top: number; height: number }
-  hingeGap: number
-}
+// Extra clearance kept between a single-page pane and the hinge that borders it.
+export const HINGE_CLEARANCE = 48
 
-export function getReaderPaneBounds(
-  pageLayout: 'single' | 'spread',
-  segments: HorizontalViewportSegments | null,
-): { left: number; width: number } | null {
-  return pageLayout === 'single' && segments
-    ? { left: segments.first.left, width: segments.first.width }
-    : null
-}
-
-interface ViewportSegment {
+export interface ViewportSegment {
   left: number
   width: number
   top: number
   height: number
+}
+
+export interface HorizontalViewportSegments {
+  first: ViewportSegment
+  second: ViewportSegment
+  hingeGap: number
+}
+
+// Portrait-spanned foldables stack their screens top/bottom with a horizontal
+// hinge between them.
+export interface StackedViewportSegments {
+  top: ViewportSegment
+  bottom: ViewportSegment
+  hingeGap: number
+}
+
+export interface ViewportSegments {
+  horizontal: HorizontalViewportSegments | null
+  stacked: StackedViewportSegments | null
+}
+
+export function getReaderPaneBounds(
+  pageLayout: 'single' | 'spread',
+  segments: ViewportSegments | null,
+): ViewportSegment | null {
+  if (pageLayout !== 'single' || !segments) return null
+  if (segments.horizontal) return segments.horizontal.first
+  if (segments.stacked) return segments.stacked.top
+  return null
 }
 
 export function resolveHorizontalViewportSegments(
@@ -38,6 +55,19 @@ export function resolveHorizontalViewportSegments(
     second,
     hingeGap: Math.max(0, second.left - (first.left + first.width)),
   }
+}
+
+export function resolveStackedViewportSegments(
+  first: ViewportSegment,
+  second: ViewportSegment,
+): StackedViewportSegments | null {
+  const [upper, lower] = first.top <= second.top ? [first, second] : [second, first]
+  if (upper.height <= 0 || lower.height <= 0 || upper.width <= 0 || lower.width <= 0) return null
+  if (upper.height < 240 || lower.height < 240) return null
+  if (Math.abs(upper.left - lower.left) > 2 || Math.abs(upper.width - lower.width) > 2) return null
+  const hingeGap = lower.top - (upper.top + upper.height)
+  if (hingeGap < 0 || hingeGap > 240) return null
+  return { top: upper, bottom: lower, hingeGap }
 }
 
 // Central gutter for a two-page spread: the detected hinge when available,
@@ -56,10 +86,18 @@ function readViewportSegment(column: number, row: number) {
   return { left, top, width, height }
 }
 
-export function measureHorizontalViewportSegments(): HorizontalViewportSegments | null {
+export function measureViewportSegments(): ViewportSegments {
   const first = readViewportSegment(0, 0)
   const second = readViewportSegment(1, 0)
-  return first && second ? resolveHorizontalViewportSegments(first, second) : null
+  if (!first || !second) return { horizontal: null, stacked: null }
+  return {
+    horizontal: resolveHorizontalViewportSegments(first, second),
+    stacked: resolveStackedViewportSegments(first, second),
+  }
+}
+
+export function measureHorizontalViewportSegments(): HorizontalViewportSegments | null {
+  return measureViewportSegments().horizontal
 }
 
 export function measureViewportHingeGap(): number {

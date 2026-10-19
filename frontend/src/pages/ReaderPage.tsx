@@ -36,7 +36,7 @@ import ThemeSwitch from '../components/ThemeSwitch'
 import RouteState from '../components/RouteState'
 import { useDeviceTheme } from '../theme/deviceTheme'
 import { libraryReturn } from '../utils/navigation'
-import { getReaderPaneBounds, measureHorizontalViewportSegments } from '../utils/viewportSegments'
+import { getReaderPaneBounds, measureViewportSegments, HINGE_CLEARANCE } from '../utils/viewportSegments'
 import { recoverProgress, saveProgress, waitForProgress } from '../utils/readingProgress'
 import type { TocItem } from '../types'
 
@@ -76,16 +76,25 @@ export default function ReaderPage() {
   const [snackMsg, setSnackMsg] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
   const [isWideViewport, setIsWideViewport] = useState(() => window.matchMedia('(min-width: 768px)').matches)
-  const [viewportSegments, setViewportSegments] = useState(() => measureHorizontalViewportSegments())
+  const [viewportSegments, setViewportSegments] = useState(() => measureViewportSegments())
   const currentProgressStringRef = useRef('')
   const pageLayout = settings.pageLayout === 'spread' && isWideViewport ? 'spread' : 'single'
   const readerPaneBounds = getReaderPaneBounds(pageLayout, viewportSegments)
+  // Single-page mode on a spanned device sits on one screen; keep the pane's
+  // hinge-adjacent edge clear so text never crowds the fold.
+  const hingeClearance = readerPaneBounds
+    ? viewportSegments?.horizontal
+      ? { paddingRight: HINGE_CLEARANCE }
+      : viewportSegments?.stacked
+        ? { paddingBottom: HINGE_CLEARANCE }
+        : {}
+    : {}
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 768px)')
     const update = () => {
       setIsWideViewport(query.matches)
-      setViewportSegments(measureHorizontalViewportSegments())
+      setViewportSegments(measureViewportSegments())
     }
     update()
     query.addEventListener('change', update)
@@ -425,10 +434,12 @@ export default function ReaderPage() {
         <Box
           sx={{
             position: 'absolute',
-            insetBlock: 0,
             left: readerPaneBounds?.left ?? 0,
             width: readerPaneBounds?.width ?? '100%',
+            top: readerPaneBounds?.top ?? 0,
+            height: readerPaneBounds?.height ?? '100%',
             overflow: 'hidden',
+            ...hingeClearance,
           }}
         >
         {format === 'epub' && (

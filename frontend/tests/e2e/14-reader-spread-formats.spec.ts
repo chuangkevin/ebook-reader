@@ -5,7 +5,7 @@ import path from 'path'
 import { tmpdir } from 'os'
 import { unlinkSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
-import { MIN_SPREAD_GUTTER, getReaderPaneBounds, resolveHorizontalViewportSegments, spreadGutterPx } from '../../src/utils/viewportSegments'
+import { MIN_SPREAD_GUTTER, getReaderPaneBounds, resolveHorizontalViewportSegments, resolveStackedViewportSegments, spreadGutterPx } from '../../src/utils/viewportSegments'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -17,13 +17,33 @@ let testBook: Awaited<ReturnType<typeof uploadBook>> | undefined
 let temporaryPdfPath: string | undefined
 
 test('Surface Duo geometry selects one left pane or the full spread', () => {
-  const segments = resolveHorizontalViewportSegments(
+  const horizontal = resolveHorizontalViewportSegments(
     { left: 0, width: 760, top: 0, height: 800 },
     { left: 800, width: 760, top: 0, height: 800 },
   )
-  expect(segments?.hingeGap).toBe(40)
-  expect(getReaderPaneBounds('single', segments)).toEqual({ left: 0, width: 760 })
-  expect(getReaderPaneBounds('spread', segments)).toBeNull()
+  expect(horizontal?.hingeGap).toBe(40)
+  expect(getReaderPaneBounds('single', { horizontal, stacked: null }))
+    .toEqual({ left: 0, width: 760, top: 0, height: 800 })
+  expect(getReaderPaneBounds('spread', { horizontal, stacked: null })).toBeNull()
+})
+
+test('portrait-spanned devices select the top pane; bogus stacks are rejected', () => {
+  const stacked = resolveStackedViewportSegments(
+    { left: 0, width: 720, top: 0, height: 1280 },
+    { left: 0, width: 720, top: 1312, height: 1280 },
+  )
+  expect(stacked?.hingeGap).toBe(32)
+  expect(getReaderPaneBounds('single', { horizontal: null, stacked }))
+    .toEqual({ left: 0, width: 720, top: 0, height: 1280 })
+  // A side-by-side split is not a stack, and a stack is not a side-by-side split.
+  expect(resolveStackedViewportSegments(
+    { left: 0, width: 760, top: 0, height: 800 },
+    { left: 800, width: 760, top: 0, height: 800 },
+  )).toBeNull()
+  expect(resolveHorizontalViewportSegments(
+    { left: 0, width: 720, top: 0, height: 1280 },
+    { left: 0, width: 720, top: 1312, height: 1280 },
+  )).toBeNull()
 })
 
 test('spread gutter keeps a minimum centre gap even without hinge data', () => {
@@ -101,9 +121,9 @@ test('TXT 雙頁模式以兩欄排版', async ({ page }) => {
   await expect.poll(() => content.evaluate((element) => getComputedStyle(element).columnCount)).toBe('2')
 })
 
-test('直排在小螢幕維持單欄且左右留白對稱', async ({ page }) => {
-  await page.setViewportSize({ width: 950, height: 760 })
+test('直排在小螢幕維持單欄且四邊邊距完整', async ({ page }) => {
   await openBook(page, EPUB_PATH)
+  await page.setViewportSize({ width: 720, height: 1280 })
   await page.waitForTimeout(1500)
   const layout = await page.evaluate(() => {
     const pag = document.querySelector('foliate-paginator') as HTMLElement & { shadowRoot: ShadowRoot | null }
@@ -111,12 +131,16 @@ test('直排在小螢幕維持單欄且左右留白對稱', async ({ page }) => 
     const container = pag.shadowRoot?.getElementById('container')?.getBoundingClientRect()
     return {
       columns: pag.getAttribute('max-column-count'),
-      paneWidth: pane.width,
       left: container ? container.left - pane.left : 0,
       right: container ? pane.right - container.right : 0,
+      top: container ? container.top - pane.top : 0,
+      bottom: container ? pane.bottom - container.bottom : 0,
     }
   })
   expect(layout.columns).toBe('1')
   expect(Math.abs(layout.left - layout.right)).toBeLessThan(8)
-  expect(layout.right).toBeGreaterThan(4)
+  expect(layout.left).toBeGreaterThanOrEqual(40)
+  expect(layout.right).toBeGreaterThanOrEqual(40)
+  expect(layout.top).toBeGreaterThanOrEqual(20)
+  expect(layout.bottom).toBeGreaterThanOrEqual(20)
 })
