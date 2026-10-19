@@ -91,6 +91,15 @@ export function measureViewportSegments(): ViewportSegments {
   if (manual !== null) return manualViewportSegments(manual)
   const simulated = simulatedViewportSegments()
   if (simulated) return simulated
+  // Microsoft Edge on Surface Duo exposes window.visualViewport.segments —
+  // the JS twin of the CSS env() probe and far cheaper to read.
+  const windowSegs = readWindowSegments()
+  if (windowSegs) {
+    return {
+      horizontal: resolveHorizontalViewportSegments(windowSegs[0], windowSegs[1]),
+      stacked: resolveStackedViewportSegments(windowSegs[0], windowSegs[1]),
+    }
+  }
   const first = readViewportSegment(0, 0)
   const second = readViewportSegment(1, 0)
   if (!first || !second) return { horizontal: null, stacked: null }
@@ -98,6 +107,19 @@ export function measureViewportSegments(): ViewportSegments {
     horizontal: resolveHorizontalViewportSegments(first, second),
     stacked: resolveStackedViewportSegments(first, second),
   }
+}
+
+// Edge ≥97 on spanned foldables publishes the segment rects here; other
+// browsers leave the property undefined.
+interface SegmentLike { left: number; top: number; width: number; height: number }
+
+function readWindowSegments(): [ViewportSegment, ViewportSegment] | null {
+  if (typeof window === 'undefined') return null
+  const segments = (window.visualViewport as (VisualViewport & { segments?: SegmentLike[] }) | null | undefined)?.segments
+  if (!Array.isArray(segments) || segments.length !== 2) return null
+  const toSeg = (s: SegmentLike): ViewportSegment => ({ left: s.left, top: s.top, width: s.width, height: s.height })
+  const sorted = segments.map(toSeg).sort((a, b) => a.top - b.top || a.left - b.left)
+  return [sorted[0], sorted[1]]
 }
 
 // Duo simulator support: the local duo-simulator page loads the app in a
