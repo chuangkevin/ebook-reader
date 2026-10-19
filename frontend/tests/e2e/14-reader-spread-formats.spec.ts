@@ -121,6 +121,27 @@ test('TXT 雙頁模式以兩欄排版', async ({ page }) => {
   await expect.poll(() => content.evaluate((element) => getComputedStyle(element).columnCount)).toBe('2')
 })
 
+test('手動轉軸寬度：真機全域設定讓閱讀區不疊中軸', async ({ page }) => {
+  await openBook(page, EPUB_PATH)
+  await page.addInitScript((id) => {
+    localStorage.setItem(`readflix.reader.pageLayout.${id}`, 'single')
+    localStorage.setItem('readflix.hinge.bar', '48')
+  }, testUser!.id)
+  await page.setViewportSize({ width: 1392, height: 900 })
+  await page.goto(`/reader/${testBook!.id}`)
+  await page.waitForSelector('foliate-paginator')
+  await page.waitForTimeout(1500)
+  const geom = await page.evaluate(() => {
+    const pag = document.querySelector('foliate-paginator') as HTMLElement
+    const b = pag.getBoundingClientRect()
+    return { left: Math.round(b.left), width: Math.round(b.width) }
+  })
+  // Manual 48px hinge at the centre of 1392: left screen 0..672, minus 48px
+  // hinge clearance → paginator spans 0..624.
+  expect(geom.left).toBe(0)
+  expect(Math.abs(geom.width - 624)).toBeLessThanOrEqual(2)
+})
+
 test('duoSim 模擬：展開橫向時閱讀區鎖在左螢幕並留轉軸淨空', async ({ page }) => {
   await openBook(page, EPUB_PATH)
   await page.addInitScript((id) => localStorage.setItem(`readflix.reader.pageLayout.${id}`, 'single'), testUser!.id)

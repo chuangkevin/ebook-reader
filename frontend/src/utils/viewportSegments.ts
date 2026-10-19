@@ -87,6 +87,8 @@ function readViewportSegment(column: number, row: number) {
 }
 
 export function measureViewportSegments(): ViewportSegments {
+  const manual = getManualHingeWidth()
+  if (manual !== null) return manualViewportSegments(manual)
   const simulated = simulatedViewportSegments()
   if (simulated) return simulated
   const first = readViewportSegment(0, 0)
@@ -122,6 +124,33 @@ function simulatedViewportSegments(): ViewportSegments | null {
 
 export function measureHorizontalViewportSegments(): HorizontalViewportSegments | null {
   return measureViewportSegments().horizontal
+}
+
+// 手動轉軸寬度（全域）：真機瀏覽器不吐 viewport segments 時，使用者在 ReaderSettings
+// 指定中軸寬度；此時視口被視為橫跨兩個等寬螢幕，全站用此寬度內縮。'auto'/未設定回退自動偵測。
+export const MANUAL_HINGE_KEY = 'readflix.hinge.bar'
+
+export function getManualHingeWidth(): number | null {
+  if (typeof window === 'undefined') return null
+  const raw = window.localStorage.getItem(MANUAL_HINGE_KEY)
+  if (!raw || raw === 'auto') return null
+  const n = Number.parseInt(raw, 10)
+  return Number.isFinite(n) && n >= 0 && n <= 256 ? n : null
+}
+
+function manualViewportSegments(hingeWidth: number): ViewportSegments {
+  const viewWidth = window.innerWidth
+  const viewHeight = window.innerHeight
+  if (viewWidth > viewHeight) {
+    const paneWidth = Math.max(1, (viewWidth - hingeWidth) / 2)
+    const first = { left: 0, width: paneWidth, top: 0, height: viewHeight }
+    const second = { left: viewWidth - paneWidth, width: paneWidth, top: 0, height: viewHeight }
+    return { horizontal: resolveHorizontalViewportSegments(first, second), stacked: null }
+  }
+  const paneHeight = Math.max(1, (viewHeight - hingeWidth) / 2)
+  const first = { left: 0, width: viewWidth, top: 0, height: paneHeight }
+  const second = { left: 0, width: viewWidth, top: viewHeight - paneHeight, height: paneHeight }
+  return { horizontal: null, stacked: resolveStackedViewportSegments(first, second) }
 }
 
 export function measureViewportHingeGap(): number {

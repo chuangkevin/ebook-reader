@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Box,
   IconButton,
@@ -13,6 +13,7 @@ import ThemeSwitch from '../ThemeSwitch'
 import { useDeviceTheme } from '../../theme/deviceTheme'
 import { saveReaderPageLayout, useSettingsStore } from '../../stores/settingsStore'
 import { api } from '../../services/api.service'
+import { MANUAL_HINGE_KEY } from '../../utils/viewportSegments'
 import type { ReaderSettings as ReaderSettingsType } from '../../types/index'
 
 // opencc-js integration pending
@@ -26,6 +27,14 @@ interface ReaderSettingsProps {
 export default function ReaderSettings({ open, onClose, userId }: ReaderSettingsProps) {
   const { settings, setSettings } = useSettingsStore()
   const { paper, setPaper } = useDeviceTheme()
+  const [manualHinge, setManualHingeState] = useState<string>(() =>
+    typeof window !== 'undefined' ? window.localStorage.getItem(MANUAL_HINGE_KEY) ?? 'auto' : 'auto')
+  const handleManualHinge = (value: string) => {
+    window.localStorage.setItem(MANUAL_HINGE_KEY, value)
+    setManualHingeState(value)
+    // Re-measure the hinge everywhere: the reader page listens for resize.
+    window.dispatchEvent(new Event('resize'))
+  }
 
   // Debounced auto-save
   const pendingSave = useRef<ReaderSettingsType | null>(null)
@@ -226,6 +235,28 @@ export default function ReaderSettings({ open, onClose, userId }: ReaderSettings
         </ToggleButtonGroup>
         <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
           暖紙色用於淺色模式；PDF 保留原始頁面色彩。
+        </Typography>
+      </Box>
+
+      {/* 轉軸寬度（全域，整台裝置共用） */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+          轉軸寬度
+        </Typography>
+        <ToggleButtonGroup
+          aria-label="轉軸寬度"
+          value={manualHinge ?? 'auto'}
+          exclusive
+          onChange={(_, value) => value && handleManualHinge(value)}
+          size="small"
+        >
+          <ToggleButton value="auto">自動</ToggleButton>
+          <ToggleButton value="32">32px</ToggleButton>
+          <ToggleButton value="48">48px</ToggleButton>
+          <ToggleButton value="64">64px</ToggleButton>
+        </ToggleButtonGroup>
+        <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+          展開螢幕共用一個視口、內容不相疊中軸。自動偵測不到時手動指定轉軸寬度；整站生效。
         </Typography>
       </Box>
 
