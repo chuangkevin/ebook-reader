@@ -102,11 +102,23 @@ export function measureViewportSegments(): ViewportSegments {
   }
   const first = readViewportSegment(0, 0)
   const second = readViewportSegment(1, 0)
-  if (!first || !second) return { horizontal: null, stacked: null }
-  return {
-    horizontal: resolveHorizontalViewportSegments(first, second),
-    stacked: resolveStackedViewportSegments(first, second),
+  if (first && second) {
+    const horizontal = resolveHorizontalViewportSegments(first, second)
+    if (horizontal) return { horizontal, stacked: resolveStackedViewportSegments(first, second) }
   }
+  // Browsers without dual-screen support (Samsung Internet on Surface Duo)
+  // never report segments; a Duo-1-sized landscape viewport is spanned, so
+  // fall back to a centred 48px hinge. Desktop windows in the same range get
+  // the same (still sensible) centre split.
+  const viewWidth = window.innerWidth
+  const viewHeight = window.innerHeight
+  if (
+    viewWidth >= 1300 && viewWidth <= 1450 && viewHeight >= 550 && viewHeight <= 950 &&
+    viewWidth / viewHeight >= 1.45
+  ) {
+    return manualViewportSegments(48)
+  }
+  return { horizontal: null, stacked: null }
 }
 
 // Edge ≥97 on spanned foldables publishes the segment rects here; other
@@ -145,7 +157,31 @@ function simulatedViewportSegments(): ViewportSegments | null {
 }
 
 export function measureHorizontalViewportSegments(): HorizontalViewportSegments | null {
-  return measureViewportSegments().horizontal
+  // Microsoft Edge on Surface Duo exposes window.visualViewport.segments —
+  // the JS twin of the CSS env() probe and far cheaper to read.
+  const windowSegs = readWindowSegments()
+  if (windowSegs) return resolveHorizontalViewportSegments(windowSegs[0], windowSegs[1])
+  const first = readViewportSegment(0, 0)
+  const second = readViewportSegment(1, 0)
+  if (first && second) {
+    const horizontal = resolveHorizontalViewportSegments(first, second)
+    if (horizontal) return horizontal
+  }
+  // Duo-1-sized landscape viewport without dual-screen support (Samsung
+  // Internet): assume a centred 48px hinge.
+  const viewWidth = window.innerWidth
+  const viewHeight = window.innerHeight
+  if (
+    viewWidth >= 1300 && viewWidth <= 1450 && viewHeight >= 550 && viewHeight <= 950 &&
+    viewWidth / viewHeight >= 1.45
+  ) {
+    const paneWidth = (viewWidth - 48) / 2
+    return resolveHorizontalViewportSegments(
+      { left: 0, width: paneWidth, top: 0, height: viewHeight },
+      { left: viewWidth - paneWidth, width: paneWidth, top: 0, height: viewHeight },
+    )
+  }
+  return null
 }
 
 // 手動轉軸寬度（全域）：真機瀏覽器不吐 viewport segments 時，使用者在 ReaderSettings
