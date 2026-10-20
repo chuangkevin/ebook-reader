@@ -127,6 +127,15 @@ function applyPageLayout(
     : Math.max(pageFlowSize * gap, MARGIN * 2)
   const gapFraction = flowSize > 0 ? gapSize / flowSize : gap
   paginator.setAttribute('gap', `${gapFraction * 100}%`)
+  // Foliate's #beforeRender resolves the --_gap percentage against the
+  // #container ({@link width}) — which is NARROWER than pageWidth — so the
+  // rendered text gap is smaller than our intended px value and drifts off
+  // the hinge. Fix: pin --_gap and --_half-gap in exact pixels so the grid's
+  // --_half-gap and content column use the intended geometry. The percentage
+  // attribute stays for foliate's JS (which computes the text column gap);
+  // the two agree closely enough not to matter visually.
+  top?.style.setProperty('--_gap', `${Math.round(gapSize)}px`)
+  top?.style.setProperty('--_half-gap', `${Math.round(gapSize / 2)}px`)
 
   // foliate-js renders the actual gap as g/(1-g) of the flow size, and the
   // grid leaves (pageWidth - maxW) / 2 of blank space on each side. Solve the
