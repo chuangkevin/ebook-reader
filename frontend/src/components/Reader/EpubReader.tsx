@@ -106,6 +106,14 @@ function applyPageLayout(
   paginator.setAttribute('margin', `${MARGIN}px`)
   const top = paginator.shadowRoot?.getElementById('top') as HTMLElement | null
   top?.style.setProperty('--_max-column-count-portrait', spread ? '2' : '1')
+  // Sync foliate's own layout-mode CSS: foliate toggles `.vertical` and `dir`
+  // in its #beforeRender from the document's computed writing-mode, but that
+  // can lag our injected CSS after a writing-mode switch. Without this, the
+  // grid keeps resolving --_max-width from --_max-block-size (the vertical
+  // formula) and the spread's two pages collapse into a narrow column that
+  // crosses the hinge.
+  top?.classList.toggle('vertical', !horizontal)
+  paginator.setAttribute('dir', horizontal ? 'ltr' : 'rtl')
 
   const perPage = spread ? 2 : 1
   const pageWidth = paginator.clientWidth
@@ -128,6 +136,13 @@ function applyPageLayout(
   const gapPx = gapFraction < 1 ? gapSize / (1 - gapFraction) : gapSize
   const widthExtent = Math.max(0, pageWidth - 2 * Math.max(MIN_SIDE_MARGIN, gapPx / 2))
   const heightExtent = Math.max(0, pageHeight - MARGIN * 2)
+  // Foliate's grid resolves --_max-width from --_max-inline-size (horizontal)
+  // or --_max-block-size (vertical), keyed off the .vertical class that its
+  // #beforeRender re-applies from its own cached #vertical. That class can
+  // lag a writing-mode switch, so pin both extents in pixels: the grid then
+  // uses our computed layout regardless of foliate's internal mode.
+  top?.style.setProperty('--_max-width', `${Math.round(widthExtent)}px`)
+  top?.style.setProperty('--_max-height', `${Math.round(heightExtent)}px`)
   const inlineSize = horizontal ? widthExtent / perPage : heightExtent / perPage
   const blockSize = horizontal ? heightExtent : widthExtent
   if (inlineSize > 0) paginator.setAttribute('max-inline-size', `${Math.round(inlineSize)}px`)
