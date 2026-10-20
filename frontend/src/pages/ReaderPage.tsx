@@ -415,7 +415,15 @@ export default function ReaderPage() {
         {/* Floating fullscreen toggle button */}
         <IconButton
           aria-label={fullscreen ? '離開全螢幕' : '全螢幕閱讀'}
-          onClick={() => setFullscreen((f) => !f)}
+          onClick={() => {
+            setFullscreen((f) => !f)
+            // The toolbar/slider collapse does not fire a real window resize,
+            // so re-flow the readers on both ends of the height transition —
+            // foliate otherwise keeps the old page size and the screenful of
+            // text stays identical to non-fullscreen.
+            window.dispatchEvent(new Event('resize'))
+            window.setTimeout(() => window.dispatchEvent(new Event('resize')), 260)
+          }}
           size="small"
           sx={{
             position: 'absolute',

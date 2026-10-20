@@ -53,7 +53,7 @@ app.get('/health', (_req, res) => {
 app.get('/api', (_req, res) => {
   res.json({
     message: 'Ebook Reader API',
-      version: '1.2.9',
+      version: '1.2.10',
     endpoints: {
       health: '/health',
       users: '/api/users',
