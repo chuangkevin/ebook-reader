@@ -174,15 +174,18 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
     }, [pageLayout, gap, loadState])
 
     useEffect(() => {
-      if (pageLayout !== 'spread' || loadState !== 'ready') return
-      const reflowSpread = () => {
+      if (loadState !== 'ready') return
+      // Reflow on window resize for ALL modes — foliate caches its page size
+      // at render time and will not notice container growth (e.g. the reader
+      // chrome collapsing into fullscreen) until it is told explicitly.
+      const reflowOnResize = () => {
         const paginator = paginatorRef.current as any
         if (paginator && !modeSwitchingRef.current) {
           applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, true)
         }
       }
-      window.addEventListener('resize', reflowSpread)
-      return () => window.removeEventListener('resize', reflowSpread)
+      window.addEventListener('resize', reflowOnResize)
+      return () => window.removeEventListener('resize', reflowOnResize)
     }, [pageLayout, gap, loadState])
 
     // Re-inject CSS when fontSize/theme/openccMode changes (no position reset needed)
