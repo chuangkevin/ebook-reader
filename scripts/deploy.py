@@ -218,8 +218,8 @@ def transaction(root, candidate, sha):
                     raise
                 time.sleep(5 * (attempt + 1))
         metadata = json.loads(run("docker", "image", "inspect", image, capture=True))[0]
-        if metadata["Architecture"] != "arm64":
-            raise DeployError("Release image is not ARM64")
+        if metadata["Architecture"] not in ("amd64", "arm64"):
+            raise DeployError(f"Release image architecture {metadata['Architecture']} is unsupported")
         receipt["images"][service] = {"tag": image, "id": metadata["Id"]}
         upcoming["services"][service]["image"] = metadata["Id"]
     prepared = recovery / "release-compose.json"
