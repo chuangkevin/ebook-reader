@@ -127,15 +127,18 @@ function applyPageLayout(
     : Math.max(pageFlowSize * gap, MARGIN * 2)
   const gapFraction = flowSize > 0 ? gapSize / flowSize : gap
   paginator.setAttribute('gap', `${gapFraction * 100}%`)
-  // Foliate's #beforeRender resolves the --_gap percentage against the
-  // #container ({@link width}) — which is NARROWER than pageWidth — so the
-  // rendered text gap is smaller than our intended px value and drifts off
-  // the hinge. Fix: pin --_gap and --_half-gap in exact pixels so the grid's
-  // --_half-gap and content column use the intended geometry. The percentage
-  // attribute stays for foliate's JS (which computes the text column gap);
-  // the two agree closely enough not to matter visually.
-  top?.style.setProperty('--_gap', `${Math.round(gapSize)}px`)
-  top?.style.setProperty('--_half-gap', `${Math.round(gapSize / 2)}px`)
+  // Pixel pins are only needed for the two-page spread on a hinge: foliate
+  // resolves the --_gap percentage against the narrower #container and its
+  // cached .vertical class can collapse the page extent. Single-page layouts
+  // (especially vertical writing) must use foliate's own formulas, otherwise
+  // the page collapses to one text column per page.
+  if (spread) {
+    top?.style.setProperty('--_gap', `${Math.round(gapSize)}px`)
+    top?.style.setProperty('--_half-gap', `${Math.round(gapSize / 2)}px`)
+  } else {
+    top?.style.removeProperty('--_gap')
+    top?.style.removeProperty('--_half-gap')
+  }
 
   // foliate-js renders the actual gap as g/(1-g) of the flow size, and the
   // grid leaves (pageWidth - maxW) / 2 of blank space on each side. Solve the
@@ -150,8 +153,13 @@ function applyPageLayout(
   // #beforeRender re-applies from its own cached #vertical. That class can
   // lag a writing-mode switch, so pin both extents in pixels: the grid then
   // uses our computed layout regardless of foliate's internal mode.
-  top?.style.setProperty('--_max-width', `${Math.round(widthExtent)}px`)
-  top?.style.setProperty('--_max-height', `${Math.round(heightExtent)}px`)
+  if (spread) {
+    top?.style.setProperty('--_max-width', `${Math.round(widthExtent)}px`)
+    top?.style.setProperty('--_max-height', `${Math.round(heightExtent)}px`)
+  } else {
+    top?.style.removeProperty('--_max-width')
+    top?.style.removeProperty('--_max-height')
+  }
   const inlineSize = horizontal ? widthExtent / perPage : heightExtent / perPage
   const blockSize = horizontal ? heightExtent : widthExtent
   if (inlineSize > 0) paginator.setAttribute('max-inline-size', `${Math.round(inlineSize)}px`)
