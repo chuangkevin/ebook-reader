@@ -73,7 +73,7 @@ function injectStyles(doc: Document, writingMode: string, fontSize: number, them
   const bodyElements = 'p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, blockquote, em, strong, b, i, small, figcaption, cite, q, dt, dd, label, summary, article, section, pre, code, figure'
   style.textContent = `
     html, body { writing-mode: ${writingMode} !important; -webkit-writing-mode: ${writingMode} !important; font-size: ${fontSize}px !important; font-family: ${READER_FONT_FAMILY} !important; background-color: ${bg} !important; -webkit-text-size-adjust: none !important; text-size-adjust: none !important; }
-    ${bodyElements} { font-size: ${fontSize}px !important; font-family: ${READER_FONT_FAMILY} !important; background-color: transparent !important; }
+    ${bodyElements} { font-size: ${fontSize}px !important; font-family: ${READER_FONT_FAMILY} !important; background-color: transparent !important; line-height: 1.8 !important; }
     ${allElements} { color: ${fg} !important; }
     ::selection { background: #98432e; color: #fffdf7; }
     html { color-scheme: ${theme === "dark" ? "dark" : "light"}; scrollbar-color: ${fg} ${bg}; }
@@ -93,6 +93,7 @@ function applyPageLayout(
   gap: number,
   writingMode: 'vertical-rl' | 'horizontal-tb',
   render = false,
+  fontSize = 18,
 ) {
   const horizontal = writingMode !== 'vertical-rl'
   // foliate-js renders a "two-column" spread as stacked blocks in vertical
@@ -122,9 +123,13 @@ function applyPageLayout(
   const flowSize = horizontal ? pageWidth : pageHeight
   const pageFlowSize = horizontal ? pageWidth / perPage : pageHeight
 
+  // Vertical writing lays lines across the width, so `gap` is the spacing
+  // between those lines. Keep it proportional to the font size or the text
+  // becomes an unreadable wall; horizontal writing uses CSS line-height.
+  const lineGap = Math.round(fontSize * 1.8)
   const gapSize = spread
     ? spreadGutterPx(measureViewportHingeGap(), pageFlowSize, gap)
-    : Math.max(pageFlowSize * gap, MARGIN * 2)
+    : Math.max(pageFlowSize * gap, horizontal ? MARGIN * 2 : lineGap, MARGIN * 2)
   const gapFraction = flowSize > 0 ? gapSize / flowSize : gap
   paginator.setAttribute('gap', `${gapFraction * 100}%`)
   // Pixel pins are only needed for the two-page spread on a hinge: foliate
@@ -144,9 +149,10 @@ function applyPageLayout(
   // grid leaves (pageWidth - maxW) / 2 of blank space on each side. Solve the
   // page extent so every pane edge keeps at least MIN_SIDE_MARGIN; the centre
   // gap and hinge clearance are handled separately.
-  const MIN_SIDE_MARGIN = 48
+  // Page margin follows the 邊距 slider so it visibly changes the layout.
+  const sideMargin = Math.min(72, Math.max(16, Math.round(pageFlowSize * gap)))
   const gapPx = gapFraction < 1 ? gapSize / (1 - gapFraction) : gapSize
-  const widthExtent = Math.max(0, pageWidth - 2 * Math.max(MIN_SIDE_MARGIN, gapPx / 2))
+  const widthExtent = Math.max(0, pageWidth - 2 * Math.max(sideMargin, gapPx / 2))
   const heightExtent = Math.max(0, pageHeight - MARGIN * 2)
   // Foliate's grid resolves --_max-width from --_max-inline-size (horizontal)
   // or --_max-block-size (vertical), keyed off the .vertical class that its
@@ -202,7 +208,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
         initializedLayoutRef.current = true
         return
       }
-      applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, true)
+      applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, true, fontSizeRef.current)
     }, [pageLayout, gap, loadState])
 
     useEffect(() => {
@@ -213,7 +219,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       const reflowOnResize = () => {
         const paginator = paginatorRef.current as any
         if (paginator && !modeSwitchingRef.current) {
-          applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, true)
+          applyPageLayout(paginator, pageLayout, gap, writingModeRef.current, true, fontSizeRef.current)
         }
       }
       window.addEventListener('resize', reflowOnResize)
@@ -267,7 +273,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
       modeSwitchingRef.current = true
       ;(async () => {
         try {
-          applyPageLayout(paginator, pageLayout, gap, writingMode, false)
+          applyPageLayout(paginator, pageLayout, gap, writingMode, false, fontSizeRef.current)
           paginator.open(book)
           // Navigate to an adjacent section first. This changes paginator's internal #index so
           // the subsequent goTo(pos.index) uses the "different section" code path, which reloads
@@ -421,7 +427,7 @@ const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(
           }
 
           paginator.setAttribute('flow', 'paginated')
-          applyPageLayout(paginator, pageLayout, gapRef.current, writingModeRef.current)
+          applyPageLayout(paginator, pageLayout, gapRef.current, writingModeRef.current, false, fontSizeRef.current)
 
           paginator.open(book)
           await paginator.next() // render first page
