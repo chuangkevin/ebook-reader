@@ -132,18 +132,11 @@ function applyPageLayout(
     : Math.max(pageFlowSize * gap, horizontal ? MARGIN * 2 : lineGap, MARGIN * 2)
   const gapFraction = flowSize > 0 ? gapSize / flowSize : gap
   paginator.setAttribute('gap', `${gapFraction * 100}%`)
-  // Pixel pins are only needed for the two-page spread on a hinge: foliate
-  // resolves the --_gap percentage against the narrower #container and its
-  // cached .vertical class can collapse the page extent. Single-page layouts
-  // (especially vertical writing) must use foliate's own formulas, otherwise
-  // the page collapses to one text column per page.
-  if (spread) {
-    top?.style.setProperty('--_gap', `${Math.round(gapSize)}px`)
-    top?.style.setProperty('--_half-gap', `${Math.round(gapSize / 2)}px`)
-  } else {
-    top?.style.removeProperty('--_gap')
-    top?.style.removeProperty('--_half-gap')
-  }
+  // Never pin --_gap in pixels: foliate's JS reads it as a percentage
+  // (parseFloat(value)/100), so "80px" would be read as 80% and blow the
+  // column math apart. The percentage attribute below is the single source.
+  top?.style.removeProperty('--_gap')
+  top?.style.removeProperty('--_half-gap')
 
   // foliate-js renders the actual gap as g/(1-g) of the flow size, and the
   // grid leaves (pageWidth - maxW) / 2 of blank space on each side. Solve the

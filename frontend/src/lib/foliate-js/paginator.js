@@ -753,8 +753,14 @@ export class Paginator extends HTMLElement {
     }
     render() {
         if (!this.#view) return
+        // The host toggles the `vertical` class when the reading mode changes;
+        // the cached #vertical flag can lag behind (it is only refreshed when
+        // an iframe reloads), which used to lay horizontal pages out with the
+        // vertical sizing rule and push text across the hinge. Trust the class.
+        const vertical = this.#top.classList.contains('vertical')
+        this.#vertical = vertical
         this.#view.render(this.#beforeRender({
-            vertical: this.#vertical,
+            vertical,
             rtl: this.#rtl,
         }))
         this.#scrollToAnchor(this.#anchor)
