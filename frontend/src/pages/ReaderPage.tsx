@@ -82,7 +82,12 @@ export default function ReaderPage() {
   const [viewportSegments, setViewportSegments] = useState(() => measureViewportSegments())
   const currentProgressStringRef = useRef('')
   const pageLayout = settings.pageLayout === 'spread' && isWideViewport ? 'spread' : 'single'
-  const readerPaneBounds = getReaderPaneBounds(pageLayout, viewportSegments)
+  // Vertical writing always renders one page (foliate cannot split vertical
+  // columns into a spread). On a foldable that page must still sit on ONE
+  // screen, otherwise the text runs straight across the hinge. Use the
+  // single-page pane geometry whenever the effective layout is single.
+  const effectivePageLayout = settings.writingMode === 'vertical-rl' ? 'single' : pageLayout
+  const readerPaneBounds = getReaderPaneBounds(effectivePageLayout, viewportSegments)
   // Single-page mode on a spanned device sits on one screen; keep the pane's
   // hinge-adjacent edge clear so text never crowds the fold.
   const hingeClearance = readerPaneBounds
